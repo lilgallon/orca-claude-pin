@@ -1,0 +1,55 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stablyai/orca/main/docs/schemas/plugins/orca-plugin.v2.schema.json",
+  "manifestVersion": 2,
+  "execution": "trusted-worker",
+  "id": "claude-account-per-project",
+  "name": "Claude Account per Project",
+  "version": "0.1.0",
+  "description": "Pin a Claude Code account to each project: agents Orca launches in that project's worktrees start with that account's CLAUDE_CONFIG_DIR.",
+  "author": { "name": "tourbut" },
+  "repository": "https://github.com/tourbut/claude-account-per-project",
+  "license": "MIT",
+  "engines": { "orca": ">=1.4.248" },
+  "pluginApi": 1,
+  "main": "src/worker.ts",
+  "contributes": {
+    "panels": [
+      {
+        "id": "accounts",
+        "title": "Claude 계정",
+        "icon": "agent",
+        "entry": "src/panel.tsx",
+        "ui": "components"
+      }
+    ],
+    "hooks": [{ "event": "agent.launch.before", "onError": "pass" }],
+    "events": [{ "on": "workspace.created" }, { "on": "workspace.removed" }],
+    "settings": [
+      {
+        "key": "orcaDataDir",
+        "title": "Orca data folder",
+        "description": "Where Orca keeps claude-profiles/. Leave empty for the default (%APPDATA%\\orca, ~/Library/Application Support/orca or ~/.config/orca).",
+        "type": "string",
+        "default": "",
+        "placeholder": "C:\\Users\\me\\AppData\\Roaming\\orca"
+      },
+      {
+        "key": "agents",
+        "title": "Routed agents",
+        "description": "Orca agent ids to route, comma separated.",
+        "type": "string",
+        "default": "claude,claude-agent-teams"
+      },
+      {
+        "key": "onMissingAccount",
+        "title": "When the chosen account is missing",
+        "description": "Refuse the launch, or start it on Orca's own account selection.",
+        "type": "string",
+        "enum": ["deny", "pass"],
+        "enumLabels": ["Refuse the launch", "Use Orca's selection"],
+        "default": "deny"
+      }
+    ]
+  },
+  "capabilities": [{ "kind": "workspace:read" }, { "kind": "storage:own" }, { "kind": "settings:own" }]
+}
