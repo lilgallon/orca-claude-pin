@@ -2,6 +2,8 @@
 
 > 프로젝트에 Claude 계정을 고정하세요.
 
+Anthropic과 무관한 비공식 플러그인입니다. Anthropic이 만들거나 보증하지 않습니다. Claude와 Claude Code는 Anthropic의 상표입니다.
+
 프로젝트(레포)마다 Claude Code 계정을 하나씩 지정하는 Orca 플러그인입니다. 지정된 프로젝트의 워크트리에서 Orca가 Claude Code를 새로 띄우면, Orca에서 전역으로 선택한 계정과 상관없이 그 계정으로 실행됩니다.
 
 ## 동작 방식
@@ -11,7 +13,7 @@
 - **계정 목록**: Orca 설정 → Accounts에 등록된 Claude 계정(`<Orca 데이터 폴더>/claude-profiles/<id>/home`)을 그대로 씁니다. 다른 `CLAUDE_CONFIG_DIR` 폴더를 직접 추가할 수도 있습니다.
 - **폴더 신뢰**: Orca는 선택 계정에만 워크스페이스 신뢰를 기록합니다. 그대로 두면 지정 계정에서는 새 워크트리마다 Claude의 신뢰 프롬프트에 멈추므로, 이 플러그인이 지정 계정에 같은 기록을 남깁니다. 홈 폴더와 그 상위, 루트에는 기록하지 않습니다. `trustWorkspaces` 설정으로 끌 수 있습니다.
 - **상태 표시줄**: 지금 보고 있는 프로젝트에 지정된 계정을 보여 줍니다.
-- **계정별 사용량**: 패널이 열려 있을 때 계정마다 5시간·주간 사용량과 초기화 시각을 보여 줍니다. 프로젝트 카드에는 지정 계정의 사용량을 한 줄로 표시합니다.
+- **계정별 사용량**: 기본으로 꺼져 있습니다. 패널의 "계정별 사용량 표시"를 켜면 패널이 열려 있을 때 계정마다 5시간·주간 사용량과 초기화 시각을 보여 줍니다. 프로젝트 카드에는 지정 계정의 사용량을 한 줄로 표시합니다.
 
 자세한 근거는 [docs/DESIGN.md](docs/DESIGN.md)에 있습니다.
 
@@ -53,7 +55,7 @@ orca plugin dev hook . agent.launch.before --data '{"agent":"claude","workspaceI
 | `orcaDataDir` | 비움 | `claude-profiles`가 있는 Orca 데이터 폴더. 비워 두면 OS 기본 경로를 씁니다. |
 | `agents` | `claude,claude-agent-teams` | 계정을 바꿔 줄 Orca 에이전트 id 목록 |
 | `onPinFailure` | `deny` | 지정을 적용할 수 없을 때(계정 폴더 없음, 로그인 안 됨, 프로젝트 확인 실패, 아래 "그 밖의 한계"의 Agent Teams·셸·실행 명령·Windows): 실행을 거부(`deny`)하거나 Orca 선택 계정으로 실행(`pass`) |
-| `showUsage` | `true` | 계정별 사용량을 표시합니다. 끄면 토큰을 읽거나 서버에 요청하지 않습니다. |
+| `showUsage` | `false` | 계정별 사용량을 표시합니다. 패널의 스위치와 같은 설정입니다. 꺼져 있으면 토큰을 읽거나 서버에 요청하지 않습니다. |
 | `trustWorkspaces` | `true` | 지정 계정에 워크스페이스 신뢰를 기록합니다. Orca의 워크스페이스 신뢰를 껐다면 이것도 끄세요. 플러그인은 그 설정을 읽을 수 없습니다. |
 
 ## 지정이 적용되지 않는 경우

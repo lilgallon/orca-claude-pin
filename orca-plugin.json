@@ -4,8 +4,8 @@
   "execution": "trusted-worker",
   "id": "claude-pin",
   "name": "Claude Pin",
-  "version": "0.3.0",
-  "description": "Pin a Claude Code account to each project. Agents Orca launches in a pinned project start with that account.",
+  "version": "0.3.1",
+  "description": "Pin a Claude Code account to each project. Agents Orca launches in a pinned project start with that account. Unofficial; not affiliated with or endorsed by Anthropic.",
   "author": { "name": "tourbut" },
   "repository": "https://github.com/tourbut/claude-pin",
   "license": "MIT",
@@ -60,9 +60,9 @@
       {
         "key": "showUsage",
         "title": "Show each account's usage",
-        "description": "While the panel is open, reads each account's stored access token and asks Anthropic's usage endpoint, as Orca does for its own usage bar. The token goes nowhere else and is not refreshed.",
+        "description": "Off by default. While the panel is open, reads each account's stored access token and asks Anthropic's usage endpoint, as Orca does for its own usage bar. The token goes nowhere else and is not refreshed.",
         "type": "boolean",
-        "default": true
+        "default": false
       }
     ]
   },

@@ -35,7 +35,7 @@ export type PanelState = {
   selectedHome: string | null
   platform: string
   onPinFailure: 'deny' | 'pass'
-  /** By account id. Null when the person turned usage off. */
+  /** By account id. Null until the person turns usage on. */
   usage: Record<string, AccountUsageView> | null
 }
 
@@ -47,6 +47,7 @@ declare module 'orca' {
     'custom.add': { input: { label: string; home: string }; output: PanelState }
     'custom.remove': { input: { id: string }; output: PanelState }
     'usage.refresh': { input: Record<string, never>; output: PanelState }
+    'usage.setEnabled': { input: { enabled: boolean }; output: PanelState }
   }
   // oxlint-disable-next-line typescript/consistent-type-definitions -- declaration merging needs an interface
   interface PluginPanelEvents {

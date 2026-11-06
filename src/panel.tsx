@@ -20,6 +20,7 @@ import {
   set,
   Spinner,
   Stack,
+  Switch,
   Text,
   type PanelContext
 } from 'orca'
@@ -239,6 +240,16 @@ function AccountsSection({ current }: { current: PanelState }) {
             {usage && account.signedIn ? <UsageDetail usage={usage[account.id]} /> : null}
           </Stack>
         ))}
+        <Switch
+          label="계정별 사용량 표시"
+          checked={usage !== null}
+          disabled={read(busy)}
+          onChange={(enabled) => void run(() => plugin.request('usage.setEnabled', { enabled }))}
+        />
+        <Text muted size="xs">
+          켜면 패널이 열려 있는 동안 각 계정의 저장된 로그인 토큰을 읽어 Anthropic 사용량 API에 요청합니다. Orca의
+          사용량 막대와 같은 방식이며, 토큰은 이 요청에만 쓰고 저장하지 않습니다.
+        </Text>
         <Text weight="medium" size="sm">
           계정 폴더 직접 추가
         </Text>

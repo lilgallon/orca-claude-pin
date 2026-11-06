@@ -303,6 +303,56 @@ test('a folder outside any repository keys to its real path, a missing one is ab
   assert.deepEqual(await resolver.keyFor('/definitely/not/here'), { kind: 'absent' })
 })
 
+test('a .git file cannot borrow a repository', async () => {
+  const { root, repo, worktree } = fixture()
+  const resolver = new RepoResolver(process.platform)
+  const repoKey = normalizeKey(repo, process.platform)
+  assert.deepEqual(await resolver.keyFor(worktree), { kind: 'key', key: repoKey }, 'a real worktree')
+  const nested = join(repo, 'src', 'deep')
+  mkdirSync(nested, { recursive: true })
+  assert.deepEqual(await resolver.keyFor(nested), { kind: 'key', key: repoKey }, 'a folder inside the repo')
+
+  const toMain = join(root, 'forged-main')
+  mkdirSync(toMain)
+  writeFileSync(join(toMain, '.git'), `gitdir: ${join(repo, '.git')}\n`)
+  assert.deepEqual(await resolver.keyFor(toMain), { kind: 'key', key: normalizeKey(toMain, process.platform) }, 'its own project')
+
+  const [admin] = readdirSync(join(repo, '.git', 'worktrees'))
+  const toWorktree = join(root, 'forged-worktree')
+  mkdirSync(toWorktree)
+  writeFileSync(join(toWorktree, '.git'), `gitdir: ${join(repo, '.git', 'worktrees', admin ?? '')}\n`)
+  assert.equal((await resolver.keyFor(toWorktree)).kind, 'unknown', 'refused while anything is pinned')
+})
+
+test('a moved worktree is unknown, and a bare repository and its worktree are one project', async () => {
+  const { root, worktree } = fixture()
+  const resolver = new RepoResolver(process.platform)
+  const moved = join(root, 'moved-away')
+  renameSync(worktree, moved)
+  assert.equal((await resolver.keyFor(moved)).kind, 'unknown')
+
+  const bare = join(root, 'bare.git')
+  execFileSync('git', ['init', '-q', '--bare', bare])
+  const tree = execFileSync('git', ['-C', bare, 'hash-object', '-t', 'tree', '-w', '/dev/null'], { encoding: 'utf8' }).trim()
+  const commit = execFileSync('git', ['-C', bare, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit-tree', '-m', 'x', tree], { encoding: 'utf8' }).trim()
+  const linked = join(root, 'bare-wt')
+  execFileSync('git', ['-C', bare, 'worktree', 'add', '-q', '--detach', linked, commit], { stdio: 'pipe' })
+  const bareKey = { kind: 'key', key: normalizeKey(bare, process.platform) }
+  assert.deepEqual(await resolver.keyFor(linked), bareKey)
+  assert.deepEqual(await resolver.keyFor(bare), bareKey)
+})
+
+test('a submodule is its own project', async () => {
+  const { root, repo } = fixture()
+  const inner = join(root, 'inner')
+  mkdirSync(inner)
+  execFileSync('git', ['-C', inner, 'init', '-q'])
+  execFileSync('git', ['-C', inner, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'init'])
+  execFileSync('git', ['-C', repo, '-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', inner, 'sub'], { stdio: 'pipe' })
+  const sub = join(repo, 'sub')
+  assert.deepEqual(await new RepoResolver(process.platform).keyFor(sub), { kind: 'key', key: normalizeKey(sub, process.platform) })
+})
+
 test('a worktree whose main repo is unreachable is unknown, then recovers', async () => {
   const { repo, worktree } = fixture()
   const moved = `${repo}-moved`
