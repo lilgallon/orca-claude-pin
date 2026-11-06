@@ -4,7 +4,7 @@
   "execution": "trusted-worker",
   "id": "claude-pin",
   "name": "Claude Pin",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Pin a Claude Code account to each project. Agents Orca launches in a pinned project start with that account.",
   "author": { "name": "tourbut" },
   "repository": "https://github.com/tourbut/claude-pin",
@@ -22,8 +22,9 @@
         "ui": "components"
       }
     ],
-    "hooks": [{ "event": "agent.launch.before", "onError": "pass" }],
-    "events": [{ "on": "workspace.created" }, { "on": "workspace.removed" }],
+    "statusBarItems": [{ "id": "pin", "tooltip": "Claude Pin" }],
+    "hooks": [{ "event": "agent.launch.before", "onError": "deny" }],
+    "events": [{ "on": "workspace.created" }, { "on": "workspace.removed" }, { "on": "workspace.changed" }],
     "settings": [
       {
         "key": "orcaDataDir",
@@ -31,7 +32,7 @@
         "description": "Where Orca keeps claude-profiles/. Leave empty for the default (%APPDATA%\\orca, ~/Library/Application Support/orca or ~/.config/orca).",
         "type": "string",
         "default": "",
-        "placeholder": "C:\\Users\\me\\AppData\\Roaming\\orca"
+        "placeholder": "/Users/me/Library/Application Support/orca"
       },
       {
         "key": "agents",
@@ -41,13 +42,27 @@
         "default": "claude,claude-agent-teams"
       },
       {
-        "key": "onMissingAccount",
-        "title": "When the chosen account is missing",
-        "description": "Refuse the launch, or start it on Orca's own account selection.",
+        "key": "onPinFailure",
+        "title": "When a pin cannot be applied",
+        "description": "A pinned project's account is missing or signed out, the plugin cannot tell which project a workspace belongs to, or the launch cannot be pinned: Agent Teams, a Claude command that sets CLAUDE_CONFIG_DIR itself, Windows with an account selected. Refuse the launch, or start it on Orca's own account selection.",
         "type": "string",
         "enum": ["deny", "pass"],
         "enumLabels": ["Refuse the launch", "Use Orca's selection"],
         "default": "deny"
+      },
+      {
+        "key": "trustWorkspaces",
+        "title": "Trust workspaces in the pinned account",
+        "description": "Orca marks a workspace trusted only in the selected account, so a pinned account would stop at Claude's trust prompt. This does the same for the pinned account. Turn it off if you turned off Orca's own workspace trust: the plugin cannot read that setting.",
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "key": "showUsage",
+        "title": "Show each account's usage",
+        "description": "While the panel is open, reads each account's stored access token and asks Anthropic's usage endpoint, as Orca does for its own usage bar. The token goes nowhere else and is not refreshed.",
+        "type": "boolean",
+        "default": true
       }
     ]
   },
