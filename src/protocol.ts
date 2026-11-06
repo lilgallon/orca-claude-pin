@@ -10,12 +10,20 @@ export type AccountView = {
   signedIn: boolean
 }
 
+export type UsageWindowView = { label: string; percent: number; resetsAt: number | null }
+
+export type AccountUsageView =
+  | { status: 'ok'; windows: UsageWindowView[]; checkedAt: number }
+  | { status: 'expired' | 'unavailable' | 'rate-limited'; message: string; checkedAt: number }
+
 export type ProjectView = {
   key: string
   name: string
   workspaces: number
   accountId: string | null
   stale: boolean
+  /** Why this project's pin cannot apply right now. */
+  problem: string | null
 }
 
 export type PanelState = {
@@ -23,6 +31,12 @@ export type PanelState = {
   projects: ProjectView[]
   orcaDataDir: string | null
   agents: string[]
+  /** The account Orca's selection points at; null means System default. */
+  selectedHome: string | null
+  platform: string
+  onPinFailure: 'deny' | 'pass'
+  /** By account id. Null when the person turned usage off. */
+  usage: Record<string, AccountUsageView> | null
 }
 
 declare module 'orca' {
@@ -32,5 +46,10 @@ declare module 'orca' {
     'route.set': { input: { key: string; accountId: string | null }; output: PanelState }
     'custom.add': { input: { label: string; home: string }; output: PanelState }
     'custom.remove': { input: { id: string }; output: PanelState }
+    'usage.refresh': { input: Record<string, never>; output: PanelState }
+  }
+  // oxlint-disable-next-line typescript/consistent-type-definitions -- declaration merging needs an interface
+  interface PluginPanelEvents {
+    'state.changed': Record<string, never>
   }
 }

@@ -9,8 +9,8 @@ function pathApi(platform: Platform) {
 
 /**
  * Orca's userData folder, where it keeps `claude-profiles/<accountId>/home`. Electron names it
- * after the app (`orca`). The worker only sees HOME / USERPROFILE (Orca scrubs the rest of the
- * environment), so APPDATA and XDG_CONFIG_HOME are derived from them.
+ * after the app (`orca`). A worker only inherits HOME and USERPROFILE of these variables, so a
+ * redirected APPDATA or XDG_CONFIG_HOME needs the `orcaDataDir` setting.
  */
 export function defaultOrcaDataDir(platform: Platform, env: Record<string, string | undefined>): string | null {
   const home = platform === 'win32' ? env.USERPROFILE ?? env.HOME : env.HOME
@@ -19,12 +19,12 @@ export function defaultOrcaDataDir(platform: Platform, env: Record<string, strin
   }
   const p = pathApi(platform)
   if (platform === 'win32') {
-    return p.join(env.APPDATA ?? p.join(home, 'AppData', 'Roaming'), 'orca')
+    return p.join(home, 'AppData', 'Roaming', 'orca')
   }
   if (platform === 'darwin') {
     return p.join(home, 'Library', 'Application Support', 'orca')
   }
-  return p.join(env.XDG_CONFIG_HOME ?? p.join(home, '.config'), 'orca')
+  return p.join(home, '.config', 'orca')
 }
 
 /** One spelling per folder, so routes match whichever separator or case a caller used. */
@@ -45,8 +45,9 @@ export function repoRootFromCommonDir(commonDir: string, platform: Platform): st
 }
 
 /**
- * Orca's worktree ids are `<repoId>::<worktree path>`; folder workspaces are `folder:<id>`.
- * The id format is internal, so this is only a fast path: callers fall back to `workspace.list`.
+ * The hook names worktrees `<repoId>::<path>` and folder-repo instances
+ * `<repoId>::<path>::workspace:<uuid>`; `folder:<id>` carries no path. The format is internal, so
+ * this is only a fast path: callers fall back to `workspace.list`, whose ids differ.
  */
 export function pathFromWorkspaceId(workspaceId: string): string | null {
   if (workspaceId.startsWith('folder:') || workspaceId.startsWith('identity:')) {
@@ -56,8 +57,13 @@ export function pathFromWorkspaceId(workspaceId: string): string | null {
   if (at <= 0) {
     return null
   }
-  const path = workspaceId.slice(at + 2)
-  return /^([A-Za-z]:[\\/]|\/)/.test(path) ? path : null
+  const path = workspaceId.slice(at + 2).replace(/::workspace:[^:]+$/, '')
+  return /^([A-Za-z]:[\\/]|\/|\\\\)/.test(path) ? path : null
+}
+
+/** A WSL path on Windows passes `existsSync`, yet its agents run inside the guest. */
+export function isWslPath(path: string, platform: Platform): boolean {
+  return platform === 'win32' && /^[\\/]{2}(wsl\$|wsl\.localhost)[\\/]/i.test(path)
 }
 
 export function displayName(key: string, platform: Platform): string {
