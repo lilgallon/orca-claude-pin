@@ -175,20 +175,24 @@ test('checks what the panel sends', async () => {
   await worker.deactivate()
 })
 
-test('usage can be turned off, and an account with no token reaches no server', async () => {
+test('usage stays off until the person turns it on, and an account with no token reaches no server', async () => {
   const { data, project, key } = orcaData()
-  const on = await mountWorker(main, {
+  const worker = await mountWorker(main, {
     host: mockHost({ settings: { orcaDataDir: data }, storage: { routes: { [key]: 'acct-1' } }, results: listing(project) })
   })
-  assert.deepEqual((await on.request('state.get', {})).usage, {})
-  await on.request('usage.refresh', {})
-  const { usage } = await on.request('state.get', {})
-  assert.equal(usage?.['acct-1']?.status, 'unavailable', 'a temp folder has no stored login')
-  await on.deactivate()
+  assert.equal((await worker.request('state.get', {})).usage, null)
+  await worker.request('usage.refresh', {})
+  assert.equal((await worker.request('state.get', {})).usage, null, 'the refresh button reads no token while off')
 
-  const off = await mountWorker(main, {
-    host: mockHost({ settings: { orcaDataDir: data, showUsage: false }, results: listing(project) })
-  })
-  assert.equal((await off.request('state.get', {})).usage, null)
-  await off.deactivate()
+  const on = await worker.request('usage.setEnabled', { enabled: true })
+  assert.notEqual(on.usage, null)
+  assert.equal(worker.host.data().settings.showUsage, true)
+  await worker.request('usage.refresh', {})
+  const { usage } = await worker.request('state.get', {})
+  assert.equal(usage?.['acct-1']?.status, 'unavailable', 'a temp folder has no stored login')
+
+  const off = await worker.request('usage.setEnabled', { enabled: false })
+  assert.equal(off.usage, null)
+  assert.deepEqual(worker.refusals, [])
+  await worker.deactivate()
 })

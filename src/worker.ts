@@ -38,7 +38,7 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
     agents: parseAgents(undefined),
     onPinFailure: 'deny',
     trustWorkspaces: true,
-    showUsage: true
+    showUsage: false
   }
   let focus: FocusContext | null = null
 
@@ -50,7 +50,7 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
       agents: parseAgents(all.agents),
       onPinFailure: all.onPinFailure === 'pass' ? 'pass' : 'deny',
       trustWorkspaces: all.trustWorkspaces !== false,
-      showUsage: all.showUsage !== false
+      showUsage: all.showUsage === true
     }
   }
 
@@ -225,6 +225,15 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   }
 
   orca.panels.handle('state.get', async () => {
+    const current = await state()
+    refreshUsage()
+    return current
+  })
+
+  orca.panels.handle('usage.setEnabled', async ({ enabled }) => {
+    await ensureLoaded()
+    await orca.settings.set('showUsage', enabled === true)
+    await readSettings()
     const current = await state()
     refreshUsage()
     return current

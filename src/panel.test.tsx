@@ -105,8 +105,24 @@ test('shows each account usage, and what stopped it', async () => {
   view.unmount()
 })
 
-test('shows no usage when it is turned off', async () => {
-  const view = await mount(panel, { host: hostFor({ ...base, usage: null }) })
-  assert.ok(!JSON.stringify(view.tree()).includes('사용량 확인 중'))
+test('usage is off until the switch is pressed, and says what turning it on does', async () => {
+  const seen: unknown[] = []
+  const host = mockHost({
+    requests: {
+      'state.get': () => ({ ...base, usage: null }),
+      'usage.setEnabled': (input: unknown) => {
+        seen.push(input)
+        return base
+      }
+    }
+  })
+  const view = await mount(panel, { host })
+  const tree = JSON.stringify(view.tree())
+  assert.ok(!tree.includes('사용량 확인 중'))
+  assert.ok(tree.includes('토큰을 읽어'), 'the switch explains itself')
+  assert.equal(view.valueOf({ label: '계정별 사용량 표시' }), false)
+  await view.toggle({ label: '계정별 사용량 표시' })
+  assert.deepEqual(seen, [{ enabled: true }])
+  assert.equal(view.valueOf({ label: '계정별 사용량 표시' }), true)
   view.unmount()
 })
