@@ -1,4 +1,4 @@
-// "Claude 계정" panel: pick an account per project. The worker owns the data; this only asks.
+// Claude Pin panel: pick an account per project. The worker owns the data; this only asks.
 import {
   atom,
   Badge,
@@ -174,7 +174,7 @@ export default function Panel() {
   return (
     <Stack gap="md">
       <Row justify="between">
-        <Heading>프로젝트별 Claude 계정</Heading>
+        <Heading>Claude Pin</Heading>
         <IconButton icon="refresh" label="새로고침" variant="ghost" disabled={read(busy)} onPress={() => void refresh()} />
       </Row>
       {error ? (

@@ -1,4 +1,6 @@
-# Claude Account per Project
+# Claude Pin
+
+> 프로젝트에 Claude 계정을 고정하세요.
 
 프로젝트(레포)마다 Claude Code 계정을 하나씩 지정하는 Orca 플러그인입니다. 지정된 프로젝트의 워크트리에서 Orca가 Claude Code를 띄우면, 그 계정 폴더가 `CLAUDE_CONFIG_DIR`로 들어갑니다.
 
@@ -14,8 +16,8 @@
 Orca **1.4.248 이상**이 필요합니다. 이 버전부터 `contributes.hooks`를 지원합니다.
 
 ```powershell
-git clone https://github.com/tourbut/claude-account-per-project
-cd claude-account-per-project
+git clone https://github.com/tourbut/claude-pin
+cd claude-pin
 orca plugin test .          # 테스트
 orca plugin dev load .      # 승인 지문을 출력하면 --approve <fingerprint>를 붙여 다시 실행
 ```
@@ -24,11 +26,11 @@ orca plugin dev load .      # 승인 지문을 출력하면 --approve <fingerpri
 
 ## 사용법
 
-1. 오른쪽 사이드바에서 **Claude 계정** 패널을 엽니다.
+1. 오른쪽 사이드바에서 **Claude Pin** 패널을 엽니다.
 2. 프로젝트마다 계정을 고릅니다. `Orca 기본`을 고르면 지정이 해제됩니다.
 3. 그다음 새로 여는 Claude 터미널부터 적용됩니다.
 
-로그 확인: `orca plugin logs local.claude-account-per-project`
+로그 확인: `orca plugin logs local.claude-pin`
 
 동작 테스트(개발 폴더로 로드한 상태에서):
 

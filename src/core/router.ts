@@ -125,7 +125,7 @@ export class Router {
     }
     const account = this.accounts().find((candidate) => candidate.id === accountId)
     if (!account || !account.exists) {
-      const reason = `${displayName(key, this.deps.platform)} 프로젝트에 지정된 Claude 계정(${accountId})을 찾을 수 없습니다. "Claude 계정" 패널에서 다시 지정하세요.`
+      const reason = `${displayName(key, this.deps.platform)} 프로젝트에 지정된 Claude 계정(${accountId})을 찾을 수 없습니다. Claude Pin 패널에서 다시 지정하세요.`
       return settings.onMissingAccount === 'deny' ? { kind: 'deny', reason } : { kind: 'pass', reason }
     }
     return { kind: 'route', key, account }

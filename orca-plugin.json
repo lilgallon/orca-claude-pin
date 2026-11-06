@@ -2,12 +2,12 @@
   "$schema": "https://raw.githubusercontent.com/stablyai/orca/main/docs/schemas/plugins/orca-plugin.v2.schema.json",
   "manifestVersion": 2,
   "execution": "trusted-worker",
-  "id": "claude-account-per-project",
-  "name": "Claude Account per Project",
+  "id": "claude-pin",
+  "name": "Claude Pin",
   "version": "0.1.0",
-  "description": "Pin a Claude Code account to each project: agents Orca launches in that project's worktrees start with that account's CLAUDE_CONFIG_DIR.",
+  "description": "Pin a Claude Code account to each project. Agents Orca launches in a pinned project start with that account.",
   "author": { "name": "tourbut" },
-  "repository": "https://github.com/tourbut/claude-account-per-project",
+  "repository": "https://github.com/tourbut/claude-pin",
   "license": "MIT",
   "engines": { "orca": ">=1.4.248" },
   "pluginApi": 1,
@@ -16,7 +16,7 @@
     "panels": [
       {
         "id": "accounts",
-        "title": "Claude 계정",
+        "title": "Claude Pin",
         "icon": "agent",
         "entry": "src/panel.tsx",
         "ui": "components"
