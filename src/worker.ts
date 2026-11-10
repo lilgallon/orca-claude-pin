@@ -103,7 +103,7 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
       await orca.host.call('statusBar.update', {
         id: STATUS_ITEM,
         visible: true,
-        text: 'Claude Pin: 계정 확인 필요',
+        text: 'Claude Pin: check account',
         tone: 'danger',
         tooltip: pin.reason.slice(0, STATUS_TOOLTIP_MAX)
       })
@@ -114,7 +114,7 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
       visible: true,
       text: `Claude Pin: ${pin.account.label}`.slice(0, STATUS_TEXT_MAX),
       tone: 'accent',
-      tooltip: `새 Claude 터미널은 ${pin.account.label} 계정으로 실행됩니다. 복원·resume 세션과 직접 입력한 claude는 Orca에서 선택한 계정을 씁니다.`.slice(
+      tooltip: `New Claude terminals run with ${pin.account.label}. Restored or resumed sessions and claude typed by hand use the account selected in Orca.`.slice(
         0,
         STATUS_TOOLTIP_MAX
       )
@@ -248,10 +248,10 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   orca.panels.handle('route.set', async ({ key, accountId }) => {
     await ensureLoaded()
     if (typeof key !== 'string' || !key) {
-      throw invalid('프로젝트를 알 수 없습니다.')
+      throw invalid('Unknown project.')
     }
     if (accountId !== null && !router.accounts().some((account) => account.id === accountId)) {
-      throw invalid('없는 계정입니다.')
+      throw invalid('No such account.')
     }
     const next = { ...routes }
     if (accountId) {
@@ -269,19 +269,19 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
     await ensureLoaded()
     const folder = normalizeKey(home.trim(), platform)
     if (!isAbsolute(folder)) {
-      throw invalid('계정 폴더는 절대 경로여야 합니다.')
+      throw invalid('The account folder must be an absolute path.')
     }
     const defaultFolder = process.env.HOME ?? process.env.USERPROFILE
     if (defaultFolder && folder === normalizeKey(join(defaultFolder, '.claude'), platform)) {
       // Naming the default folder explicitly changes Claude's Keychain entry, and so the login.
-      throw invalid('기본 폴더 ~/.claude는 지정할 수 없습니다.')
+      throw invalid('The default folder ~/.claude cannot be used.')
     }
     const added: CustomAccount = { id: `custom-${Date.now().toString(36)}`, label: label.trim(), home: folder }
     if (!describeCustom(added).exists) {
-      throw invalid('폴더가 없습니다. 먼저 그 폴더로 Claude에 로그인하세요.')
+      throw invalid('The folder does not exist. Sign in to Claude with that folder first.')
     }
     if (custom.some((account) => normalizeKey(account.home, platform) === folder)) {
-      throw invalid('이미 추가된 폴더입니다.')
+      throw invalid('This folder is already added.')
     }
     const next = [...custom, added]
     await orca.storage.set(CUSTOM_KEY, next)
@@ -292,7 +292,7 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   orca.panels.handle('custom.remove', async ({ id }) => {
     await ensureLoaded()
     if (Object.values(routes).includes(id)) {
-      throw invalid('이 계정을 쓰는 프로젝트가 있습니다. 먼저 지정을 해제하세요.')
+      throw invalid('A project uses this account. Unpin it first.')
     }
     const next = custom.filter((account) => account.id !== id)
     await orca.storage.set(CUSTOM_KEY, next)

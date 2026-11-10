@@ -68,10 +68,10 @@ export function parseUsageWindows(body: unknown): UsageWindow[] {
   const raw = body as RawUsage
   const scoped = (Array.isArray(raw.limits) ? raw.limits : [])
     .filter((limit) => limit?.kind === 'weekly_scoped' && typeof limit.scope?.model?.display_name === 'string')
-    .map((limit) => toWindow(`주간 (${String(limit.scope?.model?.display_name)})`, limit.percent, limit.resets_at))
+    .map((limit) => toWindow(`Weekly (${String(limit.scope?.model?.display_name)})`, limit.percent, limit.resets_at))
   const windows = [
-    toWindow('5시간', raw.five_hour?.utilization, raw.five_hour?.resets_at),
-    toWindow('주간', raw.seven_day?.utilization, raw.seven_day?.resets_at),
+    toWindow('5-hour', raw.five_hour?.utilization, raw.five_hour?.resets_at),
+    toWindow('Weekly', raw.seven_day?.utilization, raw.seven_day?.resets_at),
     ...scoped
   ].filter((window) => window !== null)
   // The label is the panel's key, and Orca refuses to draw a duplicate key.
@@ -85,26 +85,26 @@ export function usageFromResponse(
   checkedAt: number
 ): AccountUsage & { retryAfterMs?: number } {
   if (status === 401) {
-    return { status: 'expired', message: '토큰이 만료되었습니다. 이 계정으로 Claude를 한 번 실행하면 갱신됩니다.', checkedAt }
+    return { status: 'expired', message: 'The token has expired. Run Claude once with this account to refresh it.', checkedAt }
   }
   if (status === 429) {
     return {
       status: 'rate-limited',
-      message: '사용량 요청이 잠시 제한되었습니다.',
+      message: 'Usage requests are temporarily rate limited.',
       checkedAt,
       retryAfterMs: parseRetryAfter(retryAfter, checkedAt)
     }
   }
   if (status !== 200) {
-    return { status: 'unavailable', message: `사용량 서버가 ${status}로 응답했습니다.`, checkedAt }
+    return { status: 'unavailable', message: `The usage server responded with ${status}.`, checkedAt }
   }
   try {
     const windows = parseUsageWindows(JSON.parse(body))
     return windows.length > 0
       ? { status: 'ok', windows, checkedAt }
-      : { status: 'unavailable', message: '이 계정에는 표시할 사용량 한도가 없습니다.', checkedAt }
+      : { status: 'unavailable', message: 'This account has no usage limits to show.', checkedAt }
   } catch {
-    return { status: 'unavailable', message: '사용량 응답을 읽지 못했습니다.', checkedAt }
+    return { status: 'unavailable', message: 'Could not read the usage response.', checkedAt }
   }
 }
 
@@ -210,7 +210,7 @@ export function requestUsage(
 export async function fetchAccountUsage(home: string, now: () => number = Date.now): Promise<AccountUsage & { retryAfterMs?: number }> {
   const token = await readToken(home)
   if (!token) {
-    return { status: 'unavailable', message: '저장된 로그인 토큰을 찾지 못했습니다.', checkedAt: now() }
+    return { status: 'unavailable', message: 'No stored login token was found.', checkedAt: now() }
   }
   try {
     const { status, body, retryAfter } = await requestUsage(token)
@@ -218,7 +218,7 @@ export async function fetchAccountUsage(home: string, now: () => number = Date.n
   } catch (error) {
     // Only the code: nothing from the request reaches the panel or the log.
     const code = (error as NodeJS.ErrnoException).code ?? 'network'
-    return { status: 'unavailable', message: `사용량 서버에 연결하지 못했습니다 (${code}).`, checkedAt: now() }
+    return { status: 'unavailable', message: `Could not reach the usage server (${code}).`, checkedAt: now() }
   }
 }
 

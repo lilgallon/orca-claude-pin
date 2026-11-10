@@ -81,7 +81,7 @@ export function parseAgents(value: unknown): Set<string> {
 }
 
 function ambiguousPathProblem(path: string, project: string): string {
-  return `${path} 경로가 이 PC와 원격 호스트에 모두 있어 ${project} 프로젝트의 지정을 적용할 수 없습니다.`
+  return `${path} exists both on this machine and on a remote host, so the pin of project ${project} cannot be applied.`
 }
 
 /** Only `local` and a missing host are this machine; `ssh:` and `runtime:` rows run elsewhere. */
@@ -177,14 +177,14 @@ export class Router {
     const { orcaDataDir, agents } = this.deps.getSettings()
     const { platform } = this.deps
     if (!agents.has('claude')) {
-      return { problem: `플러그인의 Routed agents 설정에 claude가 없어 ${project} 프로젝트의 지정이 적용되지 않습니다.` }
+      return { problem: `The plugin's Routed agents setting does not include claude, so the pin of project ${project} does not apply.` }
     }
     const account = findAccount(accountId, orcaDataDir, this.deps.getCustomAccounts())
     if (!account?.exists) {
-      return { problem: `${project} 프로젝트에 지정된 Claude 계정(${accountId})을 찾을 수 없습니다. Claude Pin 패널에서 다시 지정하세요.` }
+      return { problem: `The Claude account (${accountId}) pinned to project ${project} cannot be found. Pin it again in the Claude Pin panel.` }
     }
     if (!account.signedIn) {
-      return { problem: `${project} 프로젝트에 지정된 Claude 계정(${account.label})에 로그인되어 있지 않습니다.` }
+      return { problem: `The Claude account (${account.label}) pinned to project ${project} is not signed in.` }
     }
     const selected = readSelectedHome(orcaDataDir)
     const isSelected = selected != null && normalizeKey(selected, platform) === normalizeKey(account.home, platform)
@@ -194,7 +194,7 @@ export class Router {
     // The hook is not told which shell will run the command, and Windows shells share no syntax
     // for this. Orca's overwrite only leaves the variable alone under System default.
     if (platform === 'win32' && selected !== null) {
-      return { problem: `Windows에서는 Orca 계정 선택을 System default로 두어야 프로젝트 지정(${account.label})이 적용됩니다.` }
+      return { problem: `On Windows, Orca's account selection must be System default for the project pin (${account.label}) to apply.` }
     }
     return { account, isSelected }
   }
@@ -217,7 +217,7 @@ export class Router {
     }
     const path = await this.pathOf(event.workspaceId)
     if (!path) {
-      return this.refuse(`Claude Pin이 워크스페이스 ${event.workspaceId}의 위치를 찾지 못했습니다. 잠시 후 다시 실행하세요.`)
+      return this.refuse(`Claude Pin could not find where workspace ${event.workspaceId} is. Try again in a moment.`)
     }
     const host = this.hostOfPath(path)
     if (host === 'remote') {
@@ -228,7 +228,7 @@ export class Router {
       return { kind: 'pass', reason: `${path} is not on this machine` }
     }
     if (result.kind === 'unknown') {
-      return this.refuse(`Claude Pin이 ${path}의 프로젝트를 확인하지 못했습니다: ${result.reason}`)
+      return this.refuse(`Claude Pin could not determine the project of ${path}: ${result.reason}`)
     }
     const { key } = result
     const accountId = routes[key]
@@ -246,16 +246,16 @@ export class Router {
     const { account, isSelected } = pin
     const earlier = event.env.CLAUDE_CONFIG_DIR
     if (earlier && normalizeKey(earlier, this.deps.platform) !== normalizeKey(account.home, this.deps.platform)) {
-      return this.refuse(`다른 플러그인이 ${project} 프로젝트의 Claude 계정 폴더를 ${earlier}(으)로 정했습니다.`)
+      return this.refuse(`Another plugin set the Claude account folder of project ${project} to ${earlier}.`)
     }
     if (assignsConfigDir(event.command)) {
-      return this.refuse(`실행 명령에 CLAUDE_CONFIG_DIR 지정이 들어 있어 ${project} 프로젝트의 지정을 적용할 수 없습니다. 에이전트 명령 설정을 확인하세요.`)
+      return this.refuse(`The launch command sets CLAUDE_CONFIG_DIR, so the pin of project ${project} cannot be applied. Check the agent command setting.`)
     }
     if (isSelected) {
       return { kind: 'pass', reason: `${account.label} is already Orca's selected account` }
     }
     if (event.agent === IGNORES_COMMAND_PIN) {
-      return this.refuse(`Agent Teams는 Orca에서 선택한 계정으로만 실행됩니다. ${project} 프로젝트의 지정 계정(${account.label})을 쓰려면 일반 Claude로 실행하세요.`)
+      return this.refuse(`Agent Teams only run with the account selected in Orca. To use the account pinned to project ${project} (${account.label}), launch regular Claude.`)
     }
     return { kind: 'route', key, account, path, mechanism: this.deps.platform === 'win32' ? 'env' : 'command' }
   }

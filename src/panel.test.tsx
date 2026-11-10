@@ -37,9 +37,9 @@ const hostFor = (state: PanelState, onRoute?: (input: unknown) => void) =>
 test('pins a project from its account picker', async () => {
   const seen: unknown[] = []
   const view = await mount(panel, { host: hostFor(base, (input) => seen.push(input)) })
-  await view.select({ label: 'app 계정' }, 'a1')
+  await view.select({ label: 'app account' }, 'a1')
   assert.deepEqual(seen, [{ key: '/repos/app', accountId: 'a1' }])
-  await view.select({ label: 'app 계정' }, '__orca_default__')
+  await view.select({ label: 'app account' }, '__orca_default__')
   assert.deepEqual(seen[1], { key: '/repos/app', accountId: null })
   assert.deepEqual(view.errors, [])
   view.unmount()
@@ -52,14 +52,14 @@ test('says which account unpinned launches use', async () => {
 })
 
 test('says what a pin that cannot apply will do, per the setting', async () => {
-  const projects = [{ ...base.projects[0], accountId: 'a1', problem: '지정된 계정에 로그인되어 있지 않습니다.' }]
+  const projects = [{ ...base.projects[0], accountId: 'a1', problem: 'The pinned account is not signed in.' }]
   const denied = await mount(panel, { host: hostFor({ ...base, projects }) })
   const deniedText = JSON.stringify(denied.tree())
-  assert.ok(deniedText.includes('로그인되어 있지 않습니다') && deniedText.includes('거부됩니다'))
+  assert.ok(deniedText.includes('not signed in') && deniedText.includes('will be refused'))
   denied.unmount()
 
   const passed = await mount(panel, { host: hostFor({ ...base, projects, onPinFailure: 'pass' }) })
-  assert.ok(JSON.stringify(passed.tree()).includes('선택한 계정으로 실행됩니다'))
+  assert.ok(JSON.stringify(passed.tree()).includes('run with the account selected in Orca'))
   passed.unmount()
 })
 
@@ -75,13 +75,13 @@ test('shows a request failure', async () => {
     requests: {
       'state.get': () => base,
       'route.set': () => {
-        throw new Error('없는 계정입니다.')
+        throw new Error('No such account.')
       }
     }
   })
   const view = await mount(panel, { host })
-  await view.select({ label: 'app 계정' }, 'a1')
-  assert.ok(view.summary().join('\n').includes('요청을 처리하지 못했습니다'))
+  await view.select({ label: 'app account' }, 'a1')
+  assert.ok(view.summary().join('\n').includes('The request could not be processed'))
   view.unmount()
 })
 
@@ -92,15 +92,15 @@ test('shows each account usage, and what stopped it', async () => {
     accounts: [account, other],
     projects: [{ ...base.projects[0], accountId: 'a1' }],
     usage: {
-      a1: { status: 'ok', checkedAt: 1, windows: [{ label: '5시간', percent: 23.4, resetsAt: 2_000_000_000_000 }, { label: '주간', percent: 5, resetsAt: null }] },
-      a2: { status: 'expired', checkedAt: 1, message: '토큰이 만료되었습니다.' }
+      a1: { status: 'ok', checkedAt: 1, windows: [{ label: '5-hour', percent: 23.4, resetsAt: 2_000_000_000_000 }, { label: 'Weekly', percent: 5, resetsAt: null }] },
+      a2: { status: 'expired', checkedAt: 1, message: 'The token has expired.' }
     }
   }
   const view = await mount(panel, { host: hostFor(state) })
   const tree = JSON.stringify(view.tree())
-  assert.ok(tree.includes('5시간 23% · 주간 5%'), 'one line on the project card')
-  assert.ok(tree.includes('토큰이 만료되었습니다.'))
-  assert.ok(view.find({ label: '5시간 사용량' }))
+  assert.ok(tree.includes('5-hour 23% · Weekly 5%'), 'one line on the project card')
+  assert.ok(tree.includes('The token has expired.'))
+  assert.ok(view.find({ label: '5-hour usage' }))
   assert.deepEqual(view.warnings, [])
   view.unmount()
 })
@@ -118,11 +118,11 @@ test('usage is off until the switch is pressed, and says what turning it on does
   })
   const view = await mount(panel, { host })
   const tree = JSON.stringify(view.tree())
-  assert.ok(!tree.includes('사용량 확인 중'))
-  assert.ok(tree.includes('토큰을 읽어'), 'the switch explains itself')
-  assert.equal(view.valueOf({ label: '계정별 사용량 표시' }), false)
-  await view.toggle({ label: '계정별 사용량 표시' })
+  assert.ok(!tree.includes('Checking usage'))
+  assert.ok(tree.includes('stored login token'), 'the switch explains itself')
+  assert.equal(view.valueOf({ label: "Show each account's usage" }), false)
+  await view.toggle({ label: "Show each account's usage" })
   assert.deepEqual(seen, [{ enabled: true }])
-  assert.equal(view.valueOf({ label: '계정별 사용량 표시' }), true)
+  assert.equal(view.valueOf({ label: "Show each account's usage" }), true)
   view.unmount()
 })

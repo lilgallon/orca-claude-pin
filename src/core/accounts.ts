@@ -89,7 +89,7 @@ function describeOrcaAccount(root: string, id: string): Account | null {
   }
   return {
     id,
-    label: labelFor(home, `Orca 계정 ${id.slice(0, 8)} (로그인 없음)`),
+    label: labelFor(home, `Orca account ${id.slice(0, 8)} (not signed in)`),
     home,
     source: 'orca',
     exists: true,

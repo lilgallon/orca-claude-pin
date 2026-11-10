@@ -652,14 +652,14 @@ test('reads the usage windows a plan has', () => {
   }
   assert.deepEqual(
     parseUsageWindows(max).map(({ label, percent }) => [label, percent]),
-    [['주간', 24], ['주간 (Fable)', 3]]
+    [['Weekly', 24], ['Weekly (Fable)', 3]]
   )
   assert.equal(parseUsageWindows(max)[0]?.resetsAt, new Date('2026-11-11T20:00:00.501648+00:00').getTime())
 
   const team = { five_hour: { utilization: 0, resets_at: '2026-11-06T08:20:00+00:00' }, seven_day: { utilization: 150 } }
   assert.deepEqual(parseUsageWindows(team), [
-    { label: '5시간', percent: 0, resetsAt: new Date('2026-11-06T08:20:00+00:00').getTime() },
-    { label: '주간', percent: 100, resetsAt: null }
+    { label: '5-hour', percent: 0, resetsAt: new Date('2026-11-06T08:20:00+00:00').getTime() },
+    { label: 'Weekly', percent: 100, resetsAt: null }
   ])
 
   const seconds = parseUsageWindows({ seven_day: { utilization: 1, resets_at: 1762300000 } })

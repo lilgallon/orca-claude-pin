@@ -79,16 +79,16 @@ export function setup(ctx: PanelContext): void {
 
 function accountOptions(accounts: AccountView[], current: string | null) {
   const options = [
-    { value: ORCA_DEFAULT, label: 'Orca 기본 (전역으로 선택된 계정)' },
+    { value: ORCA_DEFAULT, label: 'Orca default (globally selected account)' },
     ...accounts.map((account) => ({
       value: account.id,
-      label: `${account.label}${account.source === 'custom' ? ' · 직접 추가' : ''}${
-        !account.exists ? ' (폴더 없음)' : !account.signedIn ? ' (로그인 필요)' : ''
+      label: `${account.label}${account.source === 'custom' ? ' · added by hand' : ''}${
+        !account.exists ? ' (folder missing)' : !account.signedIn ? ' (sign-in needed)' : ''
       }`
     }))
   ]
   if (current && !accounts.some((account) => account.id === current)) {
-    options.push({ value: current, label: `알 수 없는 계정 ${current}` })
+    options.push({ value: current, label: `Unknown account ${current}` })
   }
   return options
 }
@@ -107,7 +107,7 @@ function UsageDetail({ usage }: { usage: AccountUsageView | undefined }) {
   if (!usage) {
     return (
       <Text muted size="xs">
-        사용량 확인 중
+        Checking usage
       </Text>
     )
   }
@@ -128,15 +128,15 @@ function UsageDetail({ usage }: { usage: AccountUsageView | undefined }) {
             </Text>
             {window.resetsAt ? (
               <Text muted size="xs">
-                <RelativeTime at={window.resetsAt} /> 초기화
+                resets <RelativeTime at={window.resetsAt} />
               </Text>
             ) : null}
           </Row>
-          <Progress label={`${window.label} 사용량`} labelHidden value={window.percent} />
+          <Progress label={`${window.label} usage`} labelHidden value={window.percent} />
         </Stack>
       ))}
       <Text muted size="xs">
-        <RelativeTime at={usage.checkedAt} /> 확인
+        checked <RelativeTime at={usage.checkedAt} />
       </Text>
     </Stack>
   )
@@ -154,11 +154,11 @@ function ProjectCard({ project, current }: { project: ProjectView; current: Pane
   return (
     <Card
       title={project.name}
-      description={project.stale ? 'Orca 목록에 없는 프로젝트' : `워크스페이스 ${project.workspaces}개`}
+      description={project.stale ? 'Project no longer listed in Orca' : `${project.workspaces} workspace${project.workspaces === 1 ? '' : 's'}`}
     >
       <Stack gap="xs">
         <Select
-          label={`${project.name} 계정`}
+          label={`${project.name} account`}
           labelHidden
           value={project.accountId ?? ORCA_DEFAULT}
           options={accountOptions(current.accounts, project.accountId)}
@@ -169,8 +169,8 @@ function ProjectCard({ project, current }: { project: ProjectView; current: Pane
           <Text tone="danger" size="sm">
             {problem}{' '}
             {current.onPinFailure === 'deny'
-              ? '고치기 전까지 이 프로젝트의 새 Claude 실행은 거부됩니다.'
-              : '고치기 전까지 이 프로젝트의 새 Claude는 Orca에서 선택한 계정으로 실행됩니다.'}
+              ? 'Until this is fixed, new Claude launches in this project will be refused.'
+              : 'Until this is fixed, new Claude launches in this project run with the account selected in Orca.'}
           </Text>
         ) : null}
         <Text muted size="xs" truncate>
@@ -182,10 +182,10 @@ function ProjectCard({ project, current }: { project: ProjectView; current: Pane
           </Text>
         ) : null}
         {account && !problem ? (
-          <Collapsible title="터미널에서 직접 실행하려면">
+          <Collapsible title="To run it directly in a terminal">
             <Stack gap="xs">
               <Text muted size="xs">
-                직접 입력한 claude에는 지정이 적용되지 않습니다. 이 명령을 쓰세요:
+                The pin does not apply to claude typed by hand. Use this command:
               </Text>
               <Code block>{manualCommand(current.platform, account.home)}</Code>
             </Stack>
@@ -201,14 +201,14 @@ function AccountsSection({ current }: { current: PanelState }) {
   const examplePath = platform === 'win32' ? 'C:\\Users\\me\\.claude-work' : '/Users/me/.claude-work'
   const loginCommand =
     platform === 'win32'
-      ? '$env:CLAUDE_CONFIG_DIR="<폴더>"; claude   # 그다음 /login'
-      : "CLAUDE_CONFIG_DIR='<폴더>' claude   # 그다음 /login"
+      ? '$env:CLAUDE_CONFIG_DIR="<folder>"; claude   # then /login'
+      : "CLAUDE_CONFIG_DIR='<folder>' claude   # then /login"
   return (
-    <Collapsible title="계정과 사용량" description={`${accounts.length}개`} defaultOpen>
+    <Collapsible title="Accounts and usage" description={`${accounts.length}`} defaultOpen>
       <Stack gap="sm">
         {accounts.length === 0 ? (
           <Text muted size="sm">
-            Orca 설정 → Accounts에서 Claude 계정을 추가하면 여기에 나타납니다.
+            Claude accounts you add in Orca Settings → Accounts appear here.
           </Text>
         ) : null}
         {accounts.map((account) => (
@@ -219,9 +219,9 @@ function AccountsSection({ current }: { current: PanelState }) {
                   <Text size="sm" weight="medium" truncate>
                     {account.label}
                   </Text>
-                  {account.home === current.selectedHome ? <Badge tone="accent">Orca 선택</Badge> : null}
+                  {account.home === current.selectedHome ? <Badge tone="accent">Orca selection</Badge> : null}
                   {account.signedIn ? null : (
-                    <Badge tone="warning">{account.exists ? '로그인 필요' : '폴더 없음'}</Badge>
+                    <Badge tone="warning">{account.exists ? 'Sign-in needed' : 'Folder missing'}</Badge>
                   )}
                 </Row>
                 <Text muted size="xs" truncate>
@@ -231,7 +231,7 @@ function AccountsSection({ current }: { current: PanelState }) {
               {account.source === 'custom' ? (
                 <IconButton
                   icon="delete"
-                  label="이 계정 폴더 제거"
+                  label="Remove this account folder"
                   variant="ghost"
                   onPress={() => void run(() => plugin.request('custom.remove', { id: account.id }))}
                 />
@@ -241,32 +241,32 @@ function AccountsSection({ current }: { current: PanelState }) {
           </Stack>
         ))}
         <Switch
-          label="계정별 사용량 표시"
+          label="Show each account's usage"
           checked={usage !== null}
           disabled={read(busy)}
           onChange={(enabled) => void run(() => plugin.request('usage.setEnabled', { enabled }))}
         />
         <Text muted size="xs">
-          켜면 패널이 열려 있는 동안 각 계정의 저장된 로그인 토큰을 읽어 Anthropic 사용량 API에 요청합니다. Orca의
-          사용량 막대와 같은 방식이며, 토큰은 이 요청에만 쓰고 저장하지 않습니다.
+          When on, while the panel is open, reads each account's stored login token and asks Anthropic's usage
+          API, the same way as Orca's usage bar. The token is used only for this request and is never stored.
         </Text>
         <Text weight="medium" size="sm">
-          계정 폴더 직접 추가
+          Add an account folder by hand
         </Text>
         <Text muted size="xs">
-          먼저 그 폴더로 로그인하세요. Orca의 상태 표시와 공유 설정은 Orca 계정에만 적용됩니다.
+          Sign in with that folder first. Orca's status display and shared settings apply only to Orca accounts.
         </Text>
         <Code block>{loginCommand}</Code>
-        <Input label="이름" placeholder="예: 회사 계정" value={read(customLabel)} onChange={(v) => set(customLabel, v)} />
+        <Input label="Name" placeholder="e.g. Work account" value={read(customLabel)} onChange={(v) => set(customLabel, v)} />
         <Input
-          label="CLAUDE_CONFIG_DIR 폴더"
+          label="CLAUDE_CONFIG_DIR folder"
           placeholder={examplePath}
           value={read(customHome)}
           onChange={(v) => set(customHome, v)}
           onSubmit={() => void addCustom()}
         />
         <Button icon="add" variant="outline" disabled={!read(customHome).trim() || read(busy)} onPress={() => void addCustom()}>
-          추가
+          Add
         </Button>
       </Stack>
     </Collapsible>
@@ -281,29 +281,29 @@ export default function Panel() {
     <Stack gap="md">
       <Row justify="between">
         <Heading>Claude Pin</Heading>
-        <IconButton icon="refresh" label="새로고침" variant="ghost" disabled={read(busy)} onPress={() => void refreshWithUsage()} />
+        <IconButton icon="refresh" label="Refresh" variant="ghost" disabled={read(busy)} onPress={() => void refreshWithUsage()} />
       </Row>
       {error ? (
-        <Callout tone="danger" title="요청을 처리하지 못했습니다">
+        <Callout tone="danger" title="The request could not be processed">
           {error}
         </Callout>
       ) : null}
       {!current ? (
-        <Spinner label="불러오는 중" />
+        <Spinner label="Loading" />
       ) : (
         <Stack gap="md">
           <Text muted size="sm">
-            새로 여는 Claude 터미널에 적용됩니다. 복원·resume 세션, 네이티브 채팅, 직접 입력한 claude, Orca 시작 직후의
-            실행은 Orca에서 선택한 계정({selected?.label ?? (current.selectedHome ?? 'System default')})을 씁니다.
+            Applies to newly opened Claude terminals. Restored or resumed sessions, native chat, claude typed by hand,
+            and launches right after Orca starts use the account selected in Orca ({selected?.label ?? (current.selectedHome ?? 'System default')}).
           </Text>
           {current.projects.length === 0 ? (
-            <EmptyState icon="folder" title="프로젝트가 없습니다" description="Orca에 레포를 추가하면 여기에 나타납니다." />
+            <EmptyState icon="folder" title="No projects" description="Repositories you add to Orca appear here." />
           ) : (
             current.projects.map((project) => <ProjectCard key={project.key} project={project} current={current} />)
           )}
           <AccountsSection current={current} />
           <Text muted size="xs">
-            Orca 데이터 폴더: {current.orcaDataDir ?? '알 수 없음 (설정에서 지정)'}
+            Orca data folder: {current.orcaDataDir ?? 'Unknown (set it in the settings)'}
           </Text>
         </Stack>
       )}

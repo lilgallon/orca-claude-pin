@@ -103,7 +103,7 @@ export class RepoResolver {
     }
     if (claim === 'stale') {
       // A moved worktree looks the same as a forged one, and either way the project is not known.
-      return { kind: 'unknown', reason: '워크트리가 레포에 등록된 위치와 다릅니다. git worktree repair를 실행하세요.' }
+      return { kind: 'unknown', reason: 'The worktree is not where its repository has it registered. Run git worktree repair.' }
     }
     const key = normalizeKey(repoRootFromCommonDir(answer.commonDir, this.platform), this.platform)
     this.cache.set(path, key)
