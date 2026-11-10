@@ -8,6 +8,7 @@ import {
   type Account,
   type CustomAccount
 } from './accounts.ts'
+import { messages, type Messages } from './i18n.ts'
 import { assignsConfigDir } from './launch.ts'
 import { displayName, isWslPath, normalizeKey, pathFromWorkspaceId, type Platform } from './paths.ts'
 import { RepoResolver } from './repo.ts'
@@ -63,6 +64,8 @@ export type RouterDeps = {
   getRoutes: () => Record<string, string>
   getCustomAccounts: () => CustomAccount[]
   getSettings: () => RouterSettings
+  /** The language of every reason and label the router writes. English when absent. */
+  getMessages?: () => Messages
 }
 
 /** `orca claude-teams` asks Orca for the selected account's environment and spawns Claude itself. */
@@ -78,10 +81,6 @@ export function parseAgents(value: unknown): Set<string> {
       .map((agent) => agent.trim())
       .filter(Boolean)
   )
-}
-
-function ambiguousPathProblem(path: string, project: string): string {
-  return `${path} exists both on this machine and on a remote host, so the pin of project ${project} cannot be applied.`
 }
 
 /** Only `local` and a missing host are this machine; `ssh:` and `runtime:` rows run elsewhere. */
@@ -103,9 +102,13 @@ export class Router {
     this.repos = repos ?? new RepoResolver(deps.platform)
   }
 
+  private get t(): Messages {
+    return this.deps.getMessages?.() ?? messages('en')
+  }
+
   accounts(): Account[] {
     const { orcaDataDir } = this.deps.getSettings()
-    return [...listOrcaAccounts(orcaDataDir), ...this.deps.getCustomAccounts().map(describeCustom)]
+    return [...listOrcaAccounts(orcaDataDir, this.t), ...this.deps.getCustomAccounts().map(describeCustom)]
   }
 
   selectedHome(): string | null {
@@ -177,14 +180,14 @@ export class Router {
     const { orcaDataDir, agents } = this.deps.getSettings()
     const { platform } = this.deps
     if (!agents.has('claude')) {
-      return { problem: `The plugin's Routed agents setting does not include claude, so the pin of project ${project} does not apply.` }
+      return { problem: this.t.claudeNotRouted(project) }
     }
-    const account = findAccount(accountId, orcaDataDir, this.deps.getCustomAccounts())
+    const account = findAccount(accountId, orcaDataDir, this.deps.getCustomAccounts(), this.t)
     if (!account?.exists) {
-      return { problem: `The Claude account (${accountId}) pinned to project ${project} cannot be found. Pin it again in the Claude Pin panel.` }
+      return { problem: this.t.accountNotFound(project, accountId) }
     }
     if (!account.signedIn) {
-      return { problem: `The Claude account (${account.label}) pinned to project ${project} is not signed in.` }
+      return { problem: this.t.accountSignedOut(project, account.label) }
     }
     const selected = readSelectedHome(orcaDataDir)
     const isSelected = selected != null && normalizeKey(selected, platform) === normalizeKey(account.home, platform)
@@ -194,7 +197,7 @@ export class Router {
     // The hook is not told which shell will run the command, and Windows shells share no syntax
     // for this. Orca's overwrite only leaves the variable alone under System default.
     if (platform === 'win32' && selected !== null) {
-      return { problem: `On Windows, Orca's account selection must be System default for the project pin (${account.label}) to apply.` }
+      return { problem: this.t.windowsNeedsDefault(account.label) }
     }
     return { account, isSelected }
   }
@@ -217,7 +220,7 @@ export class Router {
     }
     const path = await this.pathOf(event.workspaceId)
     if (!path) {
-      return this.refuse(`Claude Pin could not find where workspace ${event.workspaceId} is. Try again in a moment.`)
+      return this.refuse(this.t.workspaceNotFound(event.workspaceId))
     }
     const host = this.hostOfPath(path)
     if (host === 'remote') {
@@ -228,7 +231,8 @@ export class Router {
       return { kind: 'pass', reason: `${path} is not on this machine` }
     }
     if (result.kind === 'unknown') {
-      return this.refuse(`Claude Pin could not determine the project of ${path}: ${result.reason}`)
+      const reason = result.reason === 'stale-worktree' ? this.t.staleWorktree : result.reason
+      return this.refuse(this.t.projectUnknown(path, reason))
     }
     const { key } = result
     const accountId = routes[key]
@@ -237,7 +241,7 @@ export class Router {
     }
     const project = displayName(key, this.deps.platform)
     if (host === 'ambiguous') {
-      return this.refuse(ambiguousPathProblem(path, project))
+      return this.refuse(this.t.ambiguousPath(path, project))
     }
     const pin = this.checkPin(accountId, project)
     if ('problem' in pin) {
@@ -246,16 +250,16 @@ export class Router {
     const { account, isSelected } = pin
     const earlier = event.env.CLAUDE_CONFIG_DIR
     if (earlier && normalizeKey(earlier, this.deps.platform) !== normalizeKey(account.home, this.deps.platform)) {
-      return this.refuse(`Another plugin set the Claude account folder of project ${project} to ${earlier}.`)
+      return this.refuse(this.t.otherPluginFolder(project, earlier))
     }
     if (assignsConfigDir(event.command)) {
-      return this.refuse(`The launch command sets CLAUDE_CONFIG_DIR, so the pin of project ${project} cannot be applied. Check the agent command setting.`)
+      return this.refuse(this.t.commandSetsFolder(project))
     }
     if (isSelected) {
       return { kind: 'pass', reason: `${account.label} is already Orca's selected account` }
     }
     if (event.agent === IGNORES_COMMAND_PIN) {
-      return this.refuse(`Agent Teams only run with the account selected in Orca. To use the account pinned to project ${project} (${account.label}), launch regular Claude.`)
+      return this.refuse(this.t.agentTeams(project, account.label))
     }
     return { kind: 'route', key, account, path, mechanism: this.deps.platform === 'win32' ? 'env' : 'command' }
   }
@@ -288,7 +292,7 @@ export class Router {
       }
       const current = rows.get(result.key)
       if (current?.accountId && this.hostOfPath(workspace.path) === 'ambiguous') {
-        current.problem = ambiguousPathProblem(workspace.path, current.name)
+        current.problem = this.t.ambiguousPath(workspace.path, current.name)
       }
     }
     for (const [key, accountId] of Object.entries(routes)) {

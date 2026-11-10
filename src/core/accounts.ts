@@ -2,6 +2,7 @@
 // folders the person adds by hand. Plain Node only.
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { messages, type Messages } from './i18n.ts'
 
 export type Account = {
   /** Orca's account id (its folder name), or `custom-…` for a hand-added folder. */
@@ -78,7 +79,7 @@ function isFinishedHostProfile(profileDir: string): boolean {
   }
 }
 
-function describeOrcaAccount(root: string, id: string): Account | null {
+function describeOrcaAccount(root: string, id: string, t: Messages): Account | null {
   if (!ORCA_ACCOUNT_ID.test(id) || id.startsWith('selected-')) {
     return null
   }
@@ -89,7 +90,7 @@ function describeOrcaAccount(root: string, id: string): Account | null {
   }
   return {
     id,
-    label: labelFor(home, `Orca account ${id.slice(0, 8)} (not signed in)`),
+    label: labelFor(home, t.orcaAccountSignedOut(id.slice(0, 8))),
     home,
     source: 'orca',
     exists: true,
@@ -102,7 +103,7 @@ function describeOrcaAccount(root: string, id: string): Account | null {
  * account list, so this reads the folders. Orca links plugins, skills, settings and session
  * history (`projects/`) into every home, so a route keeps the same setup and resumable sessions.
  */
-export function listOrcaAccounts(orcaDataDir: string | null): Account[] {
+export function listOrcaAccounts(orcaDataDir: string | null, t: Messages = messages('en')): Account[] {
   if (!orcaDataDir) {
     return []
   }
@@ -114,7 +115,7 @@ export function listOrcaAccounts(orcaDataDir: string | null): Account[] {
     return []
   }
   return ids
-    .flatMap((id) => describeOrcaAccount(root, id) ?? [])
+    .flatMap((id) => describeOrcaAccount(root, id, t) ?? [])
     .sort((a, b) => a.label.localeCompare(b.label))
 }
 
@@ -134,13 +135,14 @@ export function describeCustom(custom: CustomAccount): Account {
 export function findAccount(
   id: string,
   orcaDataDir: string | null,
-  customAccounts: readonly CustomAccount[]
+  customAccounts: readonly CustomAccount[],
+  t: Messages = messages('en')
 ): Account | null {
   const custom = customAccounts.find((account) => account.id === id)
   if (custom) {
     return describeCustom(custom)
   }
-  return orcaDataDir ? describeOrcaAccount(join(orcaDataDir, 'claude-profiles'), id) : null
+  return orcaDataDir ? describeOrcaAccount(join(orcaDataDir, 'claude-profiles'), id, t) : null
 }
 
 /**

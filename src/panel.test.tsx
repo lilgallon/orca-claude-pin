@@ -20,7 +20,8 @@ const base: PanelState = {
   selectedHome: account.home,
   platform: 'darwin',
   onPinFailure: 'deny',
-  usage: {}
+  usage: {},
+  lang: 'en'
 }
 
 const hostFor = (state: PanelState, onRoute?: (input: unknown) => void) =>
@@ -42,6 +43,26 @@ test('pins a project from its account picker', async () => {
   await view.select({ label: 'app account' }, '__orca_default__')
   assert.deepEqual(seen[1], { key: '/repos/app', accountId: null })
   assert.deepEqual(view.errors, [])
+  view.unmount()
+})
+
+test('speaks the worker language, and tells the worker Orca locale', async () => {
+  const seen: unknown[] = []
+  const host = mockHost({
+    requests: {
+      'state.get': (input: unknown) => {
+        seen.push(input)
+        return { ...base, lang: 'fr' as const, projects: [{ ...base.projects[0], accountId: 'a1', problem: 'x' }] }
+      }
+    }
+  })
+  const view = await mount(panel, { host, locale: 'fr-FR' })
+  const tree = JSON.stringify(view.tree())
+  assert.deepEqual(seen[0], { locale: 'fr-FR' })
+  assert.ok(tree.includes('seront refusés'))
+  assert.ok(tree.includes('Comptes et utilisation'))
+  assert.ok(view.find({ label: 'Compte de app' }))
+  assert.ok(view.find({ label: 'Afficher l’utilisation de chaque compte' }))
   view.unmount()
 })
 

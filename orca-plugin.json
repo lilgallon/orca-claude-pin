@@ -63,6 +63,15 @@
         "description": "Off by default. While the panel is open, reads each account's stored access token and asks Anthropic's usage endpoint, as Orca does for its own usage bar. The token goes nowhere else and is not refreshed.",
         "type": "boolean",
         "default": false
+      },
+      {
+        "key": "language",
+        "title": "Language",
+        "description": "Language of the panel, the status bar and launch refusals. Auto follows Orca's language once the panel has been opened, else the system's.",
+        "type": "string",
+        "enum": ["auto", "en", "fr"],
+        "enumLabels": ["Auto", "English", "Français"],
+        "default": "auto"
       }
     ]
   },

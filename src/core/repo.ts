@@ -11,6 +11,8 @@ export type KeyResult =
   | { kind: 'absent' }
   /** Git could not answer, so the project is not known. Never cached. */
   | { kind: 'unknown'; reason: string }
+  /** A moved or forged worktree: the repository does not name this folder back. */
+  | { kind: 'unknown'; reason: 'stale-worktree' }
 
 type GitAnswer =
   | { kind: 'repo'; gitDir: string; commonDir: string }
@@ -103,7 +105,7 @@ export class RepoResolver {
     }
     if (claim === 'stale') {
       // A moved worktree looks the same as a forged one, and either way the project is not known.
-      return { kind: 'unknown', reason: 'The worktree is not where its repository has it registered. Run git worktree repair.' }
+      return { kind: 'unknown', reason: 'stale-worktree' }
     }
     const key = normalizeKey(repoRootFromCommonDir(answer.commonDir, this.platform), this.platform)
     this.cache.set(path, key)

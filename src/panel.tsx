@@ -8,6 +8,7 @@ import {
   Collapsible,
   Code,
   EmptyState,
+  env,
   Heading,
   IconButton,
   Input,
@@ -24,6 +25,7 @@ import {
   Text,
   type PanelContext
 } from 'orca'
+import { langFrom, messages, type Messages } from './core/i18n.ts'
 import type { AccountUsageView, AccountView, PanelState, ProjectView } from './protocol'
 
 const state = atom<PanelState | null>(null)
@@ -33,6 +35,11 @@ const customLabel = atom('customLabel', '')
 const customHome = atom('customHome', '')
 
 const ORCA_DEFAULT = '__orca_default__'
+
+/** The worker's language once it answers, so the panel and the worker's texts always agree. */
+function tr(): Messages {
+  return messages(read(state)?.lang ?? langFrom(env.locale) ?? 'en')
+}
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -50,7 +57,7 @@ async function run(task: () => Promise<PanelState>): Promise<void> {
   }
 }
 
-const refresh = () => run(() => plugin.request('state.get', {}, { timeoutMs: 15000 }))
+const refresh = () => run(() => plugin.request('state.get', { locale: env.locale }, { timeoutMs: 15000 }))
 const refreshWithUsage = () => run(() => plugin.request('usage.refresh', {}, { timeoutMs: 15000 }))
 
 function setRoute(key: string, value: string): Promise<void> {
@@ -77,18 +84,18 @@ export function setup(ctx: PanelContext): void {
   ctx.subscriptions.push(plugin.on('state.changed', () => void refresh()))
 }
 
-function accountOptions(accounts: AccountView[], current: string | null) {
+function accountOptions(t: Messages, accounts: AccountView[], current: string | null) {
   const options = [
-    { value: ORCA_DEFAULT, label: 'Orca default (globally selected account)' },
+    { value: ORCA_DEFAULT, label: t.orcaDefault },
     ...accounts.map((account) => ({
       value: account.id,
-      label: `${account.label}${account.source === 'custom' ? ' · added by hand' : ''}${
-        !account.exists ? ' (folder missing)' : !account.signedIn ? ' (sign-in needed)' : ''
+      label: `${account.label}${account.source === 'custom' ? t.addedByHand : ''}${
+        !account.exists ? t.folderMissingSuffix : !account.signedIn ? t.signInNeededSuffix : ''
       }`
     }))
   ]
   if (current && !accounts.some((account) => account.id === current)) {
-    options.push({ value: current, label: `Unknown account ${current}` })
+    options.push({ value: current, label: t.unknownAccount(current) })
   }
   return options
 }
@@ -104,10 +111,11 @@ function usageSummary(usage: AccountUsageView | undefined): string | null {
 }
 
 function UsageDetail({ usage }: { usage: AccountUsageView | undefined }) {
+  const t = tr()
   if (!usage) {
     return (
       <Text muted size="xs">
-        Checking usage
+        {t.checkingUsage}
       </Text>
     )
   }
@@ -128,15 +136,15 @@ function UsageDetail({ usage }: { usage: AccountUsageView | undefined }) {
             </Text>
             {window.resetsAt ? (
               <Text muted size="xs">
-                resets <RelativeTime at={window.resetsAt} />
+                {t.resets} <RelativeTime at={window.resetsAt} />
               </Text>
             ) : null}
           </Row>
-          <Progress label={`${window.label} usage`} labelHidden value={window.percent} />
+          <Progress label={t.usageOf(window.label)} labelHidden value={window.percent} />
         </Stack>
       ))}
       <Text muted size="xs">
-        checked <RelativeTime at={usage.checkedAt} />
+        {t.checked} <RelativeTime at={usage.checkedAt} />
       </Text>
     </Stack>
   )
@@ -149,28 +157,23 @@ function manualCommand(platform: string, home: string): string {
 }
 
 function ProjectCard({ project, current }: { project: ProjectView; current: PanelState }) {
+  const t = tr()
   const { problem } = project
   const account = current.accounts.find((candidate) => candidate.id === project.accountId)
   return (
-    <Card
-      title={project.name}
-      description={project.stale ? 'Project no longer listed in Orca' : `${project.workspaces} workspace${project.workspaces === 1 ? '' : 's'}`}
-    >
+    <Card title={project.name} description={project.stale ? t.staleProject : t.workspaces(project.workspaces)}>
       <Stack gap="xs">
         <Select
-          label={`${project.name} account`}
+          label={t.accountOf(project.name)}
           labelHidden
           value={project.accountId ?? ORCA_DEFAULT}
-          options={accountOptions(current.accounts, project.accountId)}
+          options={accountOptions(t, current.accounts, project.accountId)}
           disabled={read(busy)}
           onChange={(value) => void setRoute(project.key, value)}
         />
         {problem ? (
           <Text tone="danger" size="sm">
-            {problem}{' '}
-            {current.onPinFailure === 'deny'
-              ? 'Until this is fixed, new Claude launches in this project will be refused.'
-              : 'Until this is fixed, new Claude launches in this project run with the account selected in Orca.'}
+            {problem} {current.onPinFailure === 'deny' ? t.untilFixedDeny : t.untilFixedPass}
           </Text>
         ) : null}
         <Text muted size="xs" truncate>
@@ -182,10 +185,10 @@ function ProjectCard({ project, current }: { project: ProjectView; current: Pane
           </Text>
         ) : null}
         {account && !problem ? (
-          <Collapsible title="To run it directly in a terminal">
+          <Collapsible title={t.runDirectlyTitle}>
             <Stack gap="xs">
               <Text muted size="xs">
-                The pin does not apply to claude typed by hand. Use this command:
+                {t.runDirectlyHint}
               </Text>
               <Code block>{manualCommand(current.platform, account.home)}</Code>
             </Stack>
@@ -197,18 +200,19 @@ function ProjectCard({ project, current }: { project: ProjectView; current: Pane
 }
 
 function AccountsSection({ current }: { current: PanelState }) {
+  const t = tr()
   const { accounts, platform, usage } = current
   const examplePath = platform === 'win32' ? 'C:\\Users\\me\\.claude-work' : '/Users/me/.claude-work'
   const loginCommand =
     platform === 'win32'
-      ? '$env:CLAUDE_CONFIG_DIR="<folder>"; claude   # then /login'
-      : "CLAUDE_CONFIG_DIR='<folder>' claude   # then /login"
+      ? `$env:CLAUDE_CONFIG_DIR="<${t.loginFolder}>"; claude   # ${t.loginThen}`
+      : `CLAUDE_CONFIG_DIR='<${t.loginFolder}>' claude   # ${t.loginThen}`
   return (
-    <Collapsible title="Accounts and usage" description={`${accounts.length}`} defaultOpen>
+    <Collapsible title={t.accountsAndUsage} description={`${accounts.length}`} defaultOpen>
       <Stack gap="sm">
         {accounts.length === 0 ? (
           <Text muted size="sm">
-            Claude accounts you add in Orca Settings → Accounts appear here.
+            {t.accountsEmpty}
           </Text>
         ) : null}
         {accounts.map((account) => (
@@ -219,9 +223,9 @@ function AccountsSection({ current }: { current: PanelState }) {
                   <Text size="sm" weight="medium" truncate>
                     {account.label}
                   </Text>
-                  {account.home === current.selectedHome ? <Badge tone="accent">Orca selection</Badge> : null}
+                  {account.home === current.selectedHome ? <Badge tone="accent">{t.badgeSelected}</Badge> : null}
                   {account.signedIn ? null : (
-                    <Badge tone="warning">{account.exists ? 'Sign-in needed' : 'Folder missing'}</Badge>
+                    <Badge tone="warning">{account.exists ? t.badgeSignInNeeded : t.badgeFolderMissing}</Badge>
                   )}
                 </Row>
                 <Text muted size="xs" truncate>
@@ -231,7 +235,7 @@ function AccountsSection({ current }: { current: PanelState }) {
               {account.source === 'custom' ? (
                 <IconButton
                   icon="delete"
-                  label="Remove this account folder"
+                  label={t.removeFolder}
                   variant="ghost"
                   onPress={() => void run(() => plugin.request('custom.remove', { id: account.id }))}
                 />
@@ -241,32 +245,36 @@ function AccountsSection({ current }: { current: PanelState }) {
           </Stack>
         ))}
         <Switch
-          label="Show each account's usage"
+          label={t.showUsage}
           checked={usage !== null}
           disabled={read(busy)}
           onChange={(enabled) => void run(() => plugin.request('usage.setEnabled', { enabled }))}
         />
         <Text muted size="xs">
-          When on, while the panel is open, reads each account's stored login token and asks Anthropic's usage
-          API, the same way as Orca's usage bar. The token is used only for this request and is never stored.
+          {t.showUsageHint}
         </Text>
         <Text weight="medium" size="sm">
-          Add an account folder by hand
+          {t.addByHandTitle}
         </Text>
         <Text muted size="xs">
-          Sign in with that folder first. Orca's status display and shared settings apply only to Orca accounts.
+          {t.addByHandHint}
         </Text>
         <Code block>{loginCommand}</Code>
-        <Input label="Name" placeholder="e.g. Work account" value={read(customLabel)} onChange={(v) => set(customLabel, v)} />
         <Input
-          label="CLAUDE_CONFIG_DIR folder"
+          label={t.nameLabel}
+          placeholder={t.namePlaceholder}
+          value={read(customLabel)}
+          onChange={(v) => set(customLabel, v)}
+        />
+        <Input
+          label={t.folderLabel}
           placeholder={examplePath}
           value={read(customHome)}
           onChange={(v) => set(customHome, v)}
           onSubmit={() => void addCustom()}
         />
         <Button icon="add" variant="outline" disabled={!read(customHome).trim() || read(busy)} onPress={() => void addCustom()}>
-          Add
+          {t.add}
         </Button>
       </Stack>
     </Collapsible>
@@ -274,6 +282,7 @@ function AccountsSection({ current }: { current: PanelState }) {
 }
 
 export default function Panel() {
+  const t = tr()
   const current = read(state)
   const error = read(failure)
   const selected = current?.accounts.find((account) => account.home === current.selectedHome)
@@ -281,29 +290,28 @@ export default function Panel() {
     <Stack gap="md">
       <Row justify="between">
         <Heading>Claude Pin</Heading>
-        <IconButton icon="refresh" label="Refresh" variant="ghost" disabled={read(busy)} onPress={() => void refreshWithUsage()} />
+        <IconButton icon="refresh" label={t.refresh} variant="ghost" disabled={read(busy)} onPress={() => void refreshWithUsage()} />
       </Row>
       {error ? (
-        <Callout tone="danger" title="The request could not be processed">
+        <Callout tone="danger" title={t.requestFailed}>
           {error}
         </Callout>
       ) : null}
       {!current ? (
-        <Spinner label="Loading" />
+        <Spinner label={t.loading} />
       ) : (
         <Stack gap="md">
           <Text muted size="sm">
-            Applies to newly opened Claude terminals. Restored or resumed sessions, native chat, claude typed by hand,
-            and launches right after Orca starts use the account selected in Orca ({selected?.label ?? (current.selectedHome ?? 'System default')}).
+            {t.intro(selected?.label ?? current.selectedHome ?? 'System default')}
           </Text>
           {current.projects.length === 0 ? (
-            <EmptyState icon="folder" title="No projects" description="Repositories you add to Orca appear here." />
+            <EmptyState icon="folder" title={t.noProjectsTitle} description={t.noProjectsDescription} />
           ) : (
             current.projects.map((project) => <ProjectCard key={project.key} project={project} current={current} />)
           )}
           <AccountsSection current={current} />
           <Text muted size="xs">
-            Orca data folder: {current.orcaDataDir ?? 'Unknown (set it in the settings)'}
+            {t.dataFolder(current.orcaDataDir)}
           </Text>
         </Stack>
       )}

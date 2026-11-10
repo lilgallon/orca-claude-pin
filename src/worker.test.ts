@@ -175,6 +175,37 @@ test('checks what the panel sends', async () => {
   await worker.deactivate()
 })
 
+test('speaks Orca language once the panel reports it, unless the setting names one', async () => {
+  const { data, project, key } = orcaData()
+  const host = mockHost({
+    settings: { orcaDataDir: data },
+    storage: { routes: { [key]: 'missing-account' } },
+    results: listing(project)
+  })
+  const worker = await mountWorker(main, { host })
+  const fr = await worker.request('state.get', { locale: 'fr-FR' })
+  assert.equal(fr.lang, 'fr')
+  assert.match(fr.projects[0]?.problem ?? '', /est introuvable/)
+  assert.equal(worker.host.data().storage.locale, 'fr-FR', 'remembered for launches while the panel is closed')
+  const denied = await worker.hooks.fire('agent.launch.before', launch('claude', 'folder:p'))
+  assert.ok(denied.kind === 'deny' && /est introuvable/.test(denied.reason))
+  await assert.rejects(worker.request('route.set', { key, accountId: 'nobody' }), /n’existe pas/)
+
+  await worker.deactivate()
+
+  const english = await mountWorker(main, {
+    host: mockHost({
+      settings: { orcaDataDir: data, language: 'en' },
+      storage: { routes: { [key]: 'missing-account' }, locale: 'fr-FR' },
+      results: listing(project)
+    })
+  })
+  const en = await english.request('state.get', { locale: 'fr-FR' })
+  assert.equal(en.lang, 'en')
+  assert.match(en.projects[0]?.problem ?? '', /cannot be found/)
+  await english.deactivate()
+})
+
 test('usage stays off until the person turns it on, and an account with no token reaches no server', async () => {
   const { data, project, key } = orcaData()
   const worker = await mountWorker(main, {

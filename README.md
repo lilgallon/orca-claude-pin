@@ -15,6 +15,7 @@ An Orca plugin that assigns one Claude Code account to each project (repository)
 - **Account list**: the Claude accounts registered in Orca Settings → Accounts (`<Orca data folder>/claude-profiles/<id>/home`) are used as-is. You can also add other `CLAUDE_CONFIG_DIR` folders by hand.
 - **Folder trust**: Orca records workspace trust only in the selected account. Left alone, the pinned account would stop at Claude's trust prompt for every new worktree, so this plugin writes the same record into the pinned account. It never writes it for the home folder, its parents, or the root. It can be turned off with the `trustWorkspaces` setting.
 - **Status bar**: shows the account pinned to the project you are currently looking at.
+- **Languages**: English and French, following Orca's language by default (see the `language` setting).
 - **Per-account usage**: off by default. When you turn on "Show each account's usage" in the panel, it shows each account's 5-hour and weekly usage and reset times while the panel is open. Project cards show the pinned account's usage on one line.
 
 The detailed rationale is in [docs/DESIGN.md](docs/DESIGN.md).
@@ -59,6 +60,7 @@ orca plugin dev hook . agent.launch.before --data '{"agent":"claude","workspaceI
 | `onPinFailure` | `deny` | When a pin cannot be applied (account folder missing, not signed in, project could not be determined, or Agent Teams / shell / launch command / Windows from "Other limitations" below): refuse the launch (`deny`) or run it with Orca's selected account (`pass`) |
 | `showUsage` | `false` | Shows each account's usage. Same setting as the switch in the panel. When off, no token is read and no request is sent. |
 | `trustWorkspaces` | `true` | Records workspace trust in the pinned account. If you turned off Orca's workspace trust, turn this off too; the plugin cannot read that setting. |
+| `language` | `auto` | Language of the panel, the status bar and launch refusals: `en` (English) or `fr` (French). `auto` follows Orca's language, which only the panel can read: until the panel has been opened once, the system language is used, then English. |
 
 ## When the pin does not apply
 

@@ -37,12 +37,15 @@ export type PanelState = {
   onPinFailure: 'deny' | 'pass'
   /** By account id. Null until the person turns usage on. */
   usage: Record<string, AccountUsageView> | null
+  /** The language the worker wrote every text in; the panel follows it. */
+  lang: 'en' | 'fr'
 }
 
 declare module 'orca' {
   // oxlint-disable-next-line typescript/consistent-type-definitions -- declaration merging needs an interface
   interface PluginRequests {
-    'state.get': { input: Record<string, never>; output: PanelState }
+    /** `locale` is Orca's UI language, which only the panel can read. */
+    'state.get': { input: { locale?: string }; output: PanelState }
     'route.set': { input: { key: string; accountId: string | null }; output: PanelState }
     'custom.add': { input: { label: string; home: string }; output: PanelState }
     'custom.remove': { input: { id: string }; output: PanelState }

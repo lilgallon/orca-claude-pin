@@ -7,15 +7,18 @@
 import type { OrcaWorkerApi } from 'orca/worker'
 import { isAbsolute, join } from 'node:path'
 import { describeCustom, parseCustomAccounts, parseRoutes, type CustomAccount } from './core/accounts.ts'
+import { langFrom, messages, type Lang, type Messages } from './core/i18n.ts'
 import { pinnedCommand } from './core/launch.ts'
 import { defaultOrcaDataDir, normalizeKey } from './core/paths.ts'
 import { parseAgents, Router, type FocusContext, type ListedWorkspace, type RouterSettings } from './core/router.ts'
 import { grantFolderTrust } from './core/trust.ts'
-import { UsageTracker } from './core/usage.ts'
+import { describeUsage, UsageTracker } from './core/usage.ts'
 import type { PanelState } from './protocol.ts'
 
 const ROUTES_KEY = 'routes'
 const CUSTOM_KEY = 'customAccounts'
+/** Orca's UI language as the panel last reported it: the worker cannot read it. */
+const LOCALE_KEY = 'locale'
 const STATUS_ITEM = 'pin'
 const WARM_UP_LIMIT_MS = 3000
 /** Orca ignores a longer deny reason and lets the launch through. */
@@ -23,7 +26,7 @@ const DENY_REASON_MAX = 500
 const STATUS_TEXT_MAX = 64
 const STATUS_TOOLTIP_MAX = 256
 
-type Settings = RouterSettings & { trustWorkspaces: boolean; showUsage: boolean }
+type Settings = RouterSettings & { trustWorkspaces: boolean; showUsage: boolean; language: Lang | 'auto' }
 
 function invalid(message: string): Error {
   return Object.assign(new Error(message), { code: 'invalid_params' })
@@ -38,9 +41,20 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
     agents: parseAgents(undefined),
     onPinFailure: 'deny',
     trustWorkspaces: true,
-    showUsage: false
+    showUsage: false,
+    language: 'auto'
   }
   let focus: FocusContext | null = null
+  let orcaLocale: string | null = null
+
+  /** The setting, else Orca's language as the panel reported it, else the system's, else English. */
+  function lang(): Lang {
+    if (settings.language !== 'auto') {
+      return settings.language
+    }
+    return langFrom(orcaLocale) ?? langFrom(Intl.DateTimeFormat().resolvedOptions().locale) ?? 'en'
+  }
+  const t = (): Messages => messages(lang())
 
   async function readSettings(): Promise<void> {
     const all = ((await orca.settings.get()) ?? {}) as Record<string, unknown>
@@ -50,7 +64,8 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
       agents: parseAgents(all.agents),
       onPinFailure: all.onPinFailure === 'pass' ? 'pass' : 'deny',
       trustWorkspaces: all.trustWorkspaces !== false,
-      showUsage: all.showUsage === true
+      showUsage: all.showUsage === true,
+      language: langFrom(all.language) ?? 'auto'
     }
   }
 
@@ -63,6 +78,8 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
     }
     routes = parseRoutes(await orca.storage.get(ROUTES_KEY))
     custom = parseCustomAccounts(await orca.storage.get(CUSTOM_KEY))
+    const locale = await orca.storage.get(LOCALE_KEY)
+    orcaLocale = typeof locale === 'string' ? locale : null
     await readSettings()
     loaded = true
   }
@@ -82,7 +99,8 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
     },
     getRoutes: () => routes,
     getCustomAccounts: () => custom,
-    getSettings: () => settings
+    getSettings: () => settings,
+    getMessages: t
   })
 
   let statusRun = 0
@@ -103,7 +121,7 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
       await orca.host.call('statusBar.update', {
         id: STATUS_ITEM,
         visible: true,
-        text: 'Claude Pin: check account',
+        text: t().statusCheckAccount,
         tone: 'danger',
         tooltip: pin.reason.slice(0, STATUS_TOOLTIP_MAX)
       })
@@ -114,7 +132,7 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
       visible: true,
       text: `Claude Pin: ${pin.account.label}`.slice(0, STATUS_TEXT_MAX),
       tone: 'accent',
-      tooltip: `New Claude terminals run with ${pin.account.label}. Restored or resumed sessions and claude typed by hand use the account selected in Orca.`.slice(
+      tooltip: t().statusTooltip(pin.account.label).slice(
         0,
         STATUS_TOOLTIP_MAX
       )
@@ -132,6 +150,9 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
         routes = parseRoutes(await orca.storage.get(ROUTES_KEY))
       } else if (key === CUSTOM_KEY) {
         custom = parseCustomAccounts(await orca.storage.get(CUSTOM_KEY))
+      } else if (key === LOCALE_KEY) {
+        const locale = await orca.storage.get(LOCALE_KEY)
+        orcaLocale = typeof locale === 'string' ? locale : null
       }
       notifyChanged()
     })
@@ -209,6 +230,11 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
     })
   }
 
+  function describeAll(known: ReturnType<UsageTracker['snapshot']>): PanelState['usage'] {
+    const messagesNow = t()
+    return Object.fromEntries(Object.entries(known).map(([id, value]) => [id, describeUsage(value, messagesNow)]))
+  }
+
   async function state(): Promise<PanelState> {
     await ensureLoaded()
     const accounts = router.accounts()
@@ -220,11 +246,19 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
       selectedHome: router.selectedHome(),
       platform,
       onPinFailure: settings.onPinFailure,
-      usage: settings.showUsage ? usage.snapshot(accounts.map((account) => account.id)) : null
+      usage: settings.showUsage ? describeAll(usage.snapshot(accounts.map((account) => account.id))) : null,
+      lang: lang()
     }
   }
 
-  orca.panels.handle('state.get', async () => {
+  orca.panels.handle('state.get', async ({ locale }) => {
+    await ensureLoaded()
+    if (typeof locale === 'string' && locale && locale !== orcaLocale) {
+      // Saved, so the status bar and launch refusals speak it before the panel next opens.
+      await orca.storage.set(LOCALE_KEY, locale)
+      orcaLocale = locale
+      void guarded('status update', updateStatus)
+    }
     const current = await state()
     refreshUsage()
     return current
@@ -248,10 +282,10 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   orca.panels.handle('route.set', async ({ key, accountId }) => {
     await ensureLoaded()
     if (typeof key !== 'string' || !key) {
-      throw invalid('Unknown project.')
+      throw invalid(t().unknownProject)
     }
     if (accountId !== null && !router.accounts().some((account) => account.id === accountId)) {
-      throw invalid('No such account.')
+      throw invalid(t().noSuchAccount)
     }
     const next = { ...routes }
     if (accountId) {
@@ -269,19 +303,19 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
     await ensureLoaded()
     const folder = normalizeKey(home.trim(), platform)
     if (!isAbsolute(folder)) {
-      throw invalid('The account folder must be an absolute path.')
+      throw invalid(t().folderNotAbsolute)
     }
     const defaultFolder = process.env.HOME ?? process.env.USERPROFILE
     if (defaultFolder && folder === normalizeKey(join(defaultFolder, '.claude'), platform)) {
       // Naming the default folder explicitly changes Claude's Keychain entry, and so the login.
-      throw invalid('The default folder ~/.claude cannot be used.')
+      throw invalid(t().defaultFolderRefused)
     }
     const added: CustomAccount = { id: `custom-${Date.now().toString(36)}`, label: label.trim(), home: folder }
     if (!describeCustom(added).exists) {
-      throw invalid('The folder does not exist. Sign in to Claude with that folder first.')
+      throw invalid(t().folderMissing)
     }
     if (custom.some((account) => normalizeKey(account.home, platform) === folder)) {
-      throw invalid('This folder is already added.')
+      throw invalid(t().folderAlreadyAdded)
     }
     const next = [...custom, added]
     await orca.storage.set(CUSTOM_KEY, next)
@@ -292,7 +326,7 @@ export default async function activate(orca: OrcaWorkerApi): Promise<void> {
   orca.panels.handle('custom.remove', async ({ id }) => {
     await ensureLoaded()
     if (Object.values(routes).includes(id)) {
-      throw invalid('A project uses this account. Unpin it first.')
+      throw invalid(t().accountInUse)
     }
     const next = custom.filter((account) => account.id !== id)
     await orca.storage.set(CUSTOM_KEY, next)

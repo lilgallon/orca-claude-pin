@@ -28,7 +28,8 @@ import { defaultOrcaDataDir, isWslPath, normalizeKey, pathFromWorkspaceId, repoR
 import { RepoResolver } from './repo.ts'
 import { Router, parseAgents, type ListedWorkspace, type RouterSettings } from './router.ts'
 import { grantFolderTrust } from './trust.ts'
-import { keychainService, parseUsageWindows, requestUsage, UsageTracker, usageFromResponse } from './usage.ts'
+import { describeUsage, keychainService, parseUsageWindows, requestUsage, UsageTracker, usageFromResponse } from './usage.ts'
+import { langFrom, LANGS, messages } from './i18n.ts'
 
 test('default Orca data folder per platform', () => {
   assert.equal(
@@ -651,15 +652,15 @@ test('reads the usage windows a plan has', () => {
     spend: {}
   }
   assert.deepEqual(
-    parseUsageWindows(max).map(({ label, percent }) => [label, percent]),
-    [['Weekly', 24], ['Weekly (Fable)', 3]]
+    parseUsageWindows(max).map(({ kind, model, percent }) => [kind, model, percent]),
+    [['seven_day', undefined, 24], ['weekly_scoped', 'Fable', 3]]
   )
   assert.equal(parseUsageWindows(max)[0]?.resetsAt, new Date('2026-11-11T20:00:00.501648+00:00').getTime())
 
   const team = { five_hour: { utilization: 0, resets_at: '2026-11-06T08:20:00+00:00' }, seven_day: { utilization: 150 } }
   assert.deepEqual(parseUsageWindows(team), [
-    { label: '5-hour', percent: 0, resetsAt: new Date('2026-11-06T08:20:00+00:00').getTime() },
-    { label: 'Weekly', percent: 100, resetsAt: null }
+    { kind: 'five_hour', percent: 0, resetsAt: new Date('2026-11-06T08:20:00+00:00').getTime() },
+    { kind: 'seven_day', percent: 100, resetsAt: null }
   ])
 
   const seconds = parseUsageWindows({ seven_day: { utilization: 1, resets_at: 1762300000 } })
@@ -689,6 +690,38 @@ test('says what each usage response means', () => {
   assert.equal(usageFromResponse(429, '', 'Fri, 06 Nov 2026 02:00:00 GMT', now).retryAfterMs, 7_200_000)
 })
 
+test('a usage result reads in each language, after the fact', () => {
+  const ok = usageFromResponse(200, JSON.stringify({ five_hour: { utilization: 5 }, limits: [{ kind: 'weekly_scoped', percent: 2, scope: { model: { display_name: 'Fable' } } }] }), undefined, 5)
+  const labels = (lang: 'en' | 'fr') => {
+    const view = describeUsage(ok, messages(lang))
+    return view.status === 'ok' ? view.windows.map((window) => window.label) : []
+  }
+  assert.deepEqual(labels('en'), ['5-hour', 'Weekly (Fable)'])
+  assert.deepEqual(labels('fr'), ['5 heures', 'Hebdomadaire (Fable)'])
+  const failed = usageFromResponse(503, '', undefined, 5)
+  const en = describeUsage(failed, messages('en'))
+  const fr = describeUsage(failed, messages('fr'))
+  assert.ok(en.status !== 'ok' && en.message.includes('503') && en.message.startsWith('The usage server'))
+  assert.ok(fr.status !== 'ok' && fr.message.includes('503') && fr.message.startsWith('Le serveur'))
+})
+
+test('every language has every text, and tags pick a language', () => {
+  const keys = Object.keys(messages('en')).sort()
+  for (const lang of LANGS) {
+    const catalog = messages(lang) as Record<string, unknown>
+    assert.deepEqual(Object.keys(catalog).sort(), keys, lang)
+    for (const key of keys) {
+      assert.equal(typeof catalog[key], typeof (messages('en') as Record<string, unknown>)[key], `${lang}.${key}`)
+    }
+  }
+  assert.equal(langFrom('fr-FR'), 'fr')
+  assert.equal(langFrom('fr_CA'), 'fr')
+  assert.equal(langFrom('EN-us'), 'en')
+  assert.equal(langFrom('ko-KR'), null)
+  assert.equal(langFrom('auto'), null)
+  assert.equal(langFrom(undefined), null)
+})
+
 test('names the Keychain item as Claude Code does', () => {
   // The value macOS really holds for this folder name is covered by the live check in docs/DESIGN.md.
   assert.match(keychainService('/a b'), /^Claude Code-credentials-[0-9a-f]{8}$/)
@@ -701,7 +734,7 @@ test('asks one account at a time, no more often than it should', async () => {
   const tracker = new UsageTracker(async (home) => {
     asked.push(home)
     return home === '/limited'
-      ? { status: 'rate-limited', message: 'x', checkedAt: now, retryAfterMs: 30 * 60_000 }
+      ? { status: 'rate-limited', reason: 'rate-limited', checkedAt: now, retryAfterMs: 30 * 60_000 }
       : { status: 'ok', windows: [], checkedAt: now }
   }, () => now)
   const accounts = [{ id: 'a', home: '/a' }, { id: 'l', home: '/limited' }]

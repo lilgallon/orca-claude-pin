@@ -10,11 +10,32 @@ import { readFile } from 'node:fs/promises'
 import https from 'node:https'
 import { join } from 'node:path'
 import tls from 'node:tls'
+import type { Messages } from './i18n.ts'
 
-export type UsageWindow = { label: string; percent: number; resetsAt: number | null }
+/** Language neutral, so a cached result reads right after the language changes. */
+export type UsageWindow = {
+  kind: 'five_hour' | 'seven_day' | 'weekly_scoped'
+  /** The model a `weekly_scoped` window counts. */
+  model?: string
+  percent: number
+  resetsAt: number | null
+}
+
+export type UsageReason = 'expired' | 'rate-limited' | 'http' | 'no-limits' | 'bad-response' | 'no-token' | 'network'
 
 export type AccountUsage =
   | { status: 'ok'; windows: UsageWindow[]; checkedAt: number }
+  | {
+      status: 'expired' | 'unavailable' | 'rate-limited'
+      reason: UsageReason
+      /** The HTTP status for `http`, the system error code for `network`. */
+      detail?: string
+      checkedAt: number
+    }
+
+/** What the panel shows for one account, in the person's language. */
+export type UsageView =
+  | { status: 'ok'; windows: { label: string; percent: number; resetsAt: number | null }[]; checkedAt: number }
   | { status: 'expired' | 'unavailable' | 'rate-limited'; message: string; checkedAt: number }
 
 type RawWindow = { utilization?: unknown; resets_at?: unknown }
@@ -34,11 +55,49 @@ const MAX_RETRY_AFTER_MS = 24 * 60 * 60_000
 /** Separates plausible epoch seconds (before 2286) from milliseconds, as Orca does. */
 const EPOCH_SECONDS_LIMIT = 10_000_000_000
 
-function toWindow(label: string, percent: unknown, resetsAt: unknown): UsageWindow | null {
+function toWindow(kind: UsageWindow['kind'], percent: unknown, resetsAt: unknown, model?: string): UsageWindow | null {
   if (typeof percent !== 'number' || !Number.isFinite(percent)) {
     return null
   }
-  return { label, percent: Math.min(100, Math.max(0, percent)), resetsAt: parseReset(resetsAt) }
+  const window: UsageWindow = { kind, percent: Math.min(100, Math.max(0, percent)), resetsAt: parseReset(resetsAt) }
+  return model === undefined ? window : { ...window, model }
+}
+
+export function windowLabel(window: UsageWindow, t: Messages): string {
+  if (window.kind === 'five_hour') {
+    return t.windowFiveHour
+  }
+  return window.kind === 'seven_day' ? t.windowWeekly : t.windowWeeklyModel(window.model ?? '')
+}
+
+function reasonMessage(reason: UsageReason, detail: string | undefined, t: Messages): string {
+  switch (reason) {
+    case 'expired':
+      return t.usageExpired
+    case 'rate-limited':
+      return t.usageRateLimited
+    case 'http':
+      return t.usageHttp(Number(detail))
+    case 'no-limits':
+      return t.usageNoLimits
+    case 'bad-response':
+      return t.usageBadResponse
+    case 'no-token':
+      return t.usageNoToken
+    case 'network':
+      return t.usageNetwork(detail ?? 'network')
+  }
+}
+
+export function describeUsage(usage: AccountUsage, t: Messages): UsageView {
+  if (usage.status === 'ok') {
+    return {
+      status: 'ok',
+      checkedAt: usage.checkedAt,
+      windows: usage.windows.map((window) => ({ label: windowLabel(window, t), percent: window.percent, resetsAt: window.resetsAt }))
+    }
+  }
+  return { status: usage.status, message: reasonMessage(usage.reason, usage.detail, t), checkedAt: usage.checkedAt }
 }
 
 function parseReset(value: unknown): number | null {
@@ -68,14 +127,15 @@ export function parseUsageWindows(body: unknown): UsageWindow[] {
   const raw = body as RawUsage
   const scoped = (Array.isArray(raw.limits) ? raw.limits : [])
     .filter((limit) => limit?.kind === 'weekly_scoped' && typeof limit.scope?.model?.display_name === 'string')
-    .map((limit) => toWindow(`Weekly (${String(limit.scope?.model?.display_name)})`, limit.percent, limit.resets_at))
+    .map((limit) => toWindow('weekly_scoped', limit.percent, limit.resets_at, String(limit.scope?.model?.display_name)))
   const windows = [
-    toWindow('5-hour', raw.five_hour?.utilization, raw.five_hour?.resets_at),
-    toWindow('Weekly', raw.seven_day?.utilization, raw.seven_day?.resets_at),
+    toWindow('five_hour', raw.five_hour?.utilization, raw.five_hour?.resets_at),
+    toWindow('seven_day', raw.seven_day?.utilization, raw.seven_day?.resets_at),
     ...scoped
   ].filter((window) => window !== null)
   // The label is the panel's key, and Orca refuses to draw a duplicate key.
-  return windows.filter((window, index) => windows.findIndex((other) => other.label === window.label) === index)
+  const same = (a: UsageWindow, b: UsageWindow) => a.kind === b.kind && a.model === b.model
+  return windows.filter((window, index) => windows.findIndex((other) => same(other, window)) === index)
 }
 
 export function usageFromResponse(
@@ -85,26 +145,26 @@ export function usageFromResponse(
   checkedAt: number
 ): AccountUsage & { retryAfterMs?: number } {
   if (status === 401) {
-    return { status: 'expired', message: 'The token has expired. Run Claude once with this account to refresh it.', checkedAt }
+    return { status: 'expired', reason: 'expired', checkedAt }
   }
   if (status === 429) {
     return {
       status: 'rate-limited',
-      message: 'Usage requests are temporarily rate limited.',
+      reason: 'rate-limited',
       checkedAt,
       retryAfterMs: parseRetryAfter(retryAfter, checkedAt)
     }
   }
   if (status !== 200) {
-    return { status: 'unavailable', message: `The usage server responded with ${status}.`, checkedAt }
+    return { status: 'unavailable', reason: 'http', detail: String(status), checkedAt }
   }
   try {
     const windows = parseUsageWindows(JSON.parse(body))
     return windows.length > 0
       ? { status: 'ok', windows, checkedAt }
-      : { status: 'unavailable', message: 'This account has no usage limits to show.', checkedAt }
+      : { status: 'unavailable', reason: 'no-limits', checkedAt }
   } catch {
-    return { status: 'unavailable', message: 'Could not read the usage response.', checkedAt }
+    return { status: 'unavailable', reason: 'bad-response', checkedAt }
   }
 }
 
@@ -210,7 +270,7 @@ export function requestUsage(
 export async function fetchAccountUsage(home: string, now: () => number = Date.now): Promise<AccountUsage & { retryAfterMs?: number }> {
   const token = await readToken(home)
   if (!token) {
-    return { status: 'unavailable', message: 'No stored login token was found.', checkedAt: now() }
+    return { status: 'unavailable', reason: 'no-token', checkedAt: now() }
   }
   try {
     const { status, body, retryAfter } = await requestUsage(token)
@@ -218,7 +278,7 @@ export async function fetchAccountUsage(home: string, now: () => number = Date.n
   } catch (error) {
     // Only the code: nothing from the request reaches the panel or the log.
     const code = (error as NodeJS.ErrnoException).code ?? 'network'
-    return { status: 'unavailable', message: `Could not reach the usage server (${code}).`, checkedAt: now() }
+    return { status: 'unavailable', reason: 'network', detail: code, checkedAt: now() }
   }
 }
 
